@@ -61,6 +61,7 @@ worktree-add *args:
 
     # Copy latest justfile into worktree
     cp "$wb_root/justfile" "$wt/justfile"
+    [[ -f "$wb_root/.env" ]] && cp "$wb_root/.env" "$wt/.env"
 
     # Write marker
     touch "$wt/.is_worktree"
