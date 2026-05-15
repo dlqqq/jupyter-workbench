@@ -6,34 +6,56 @@ A lightweight Jupyter extension development orchestrator. Create parallel worktr
 
 ```bash
 # Create a worktree with specific packages for development
-just worktree-create my-feature jupyter-ai-acp-client jupyter-ai-persona-manager
+just worktree-add my-feature jupyter-ai-acp-client jupyter-ai-persona-manager
 
 # Start JupyterLab from the worktree
 cd worktrees/my-feature
 just start
 
 # Add another package later
-just worktree-add jupyter-ai-router
+just add-dev jupyter-ai-router
+
+# Switch a branch before building
+cd jupyter-ai-acp-client && git checkout my-branch && cd ..
+just build  # from inside the repo
 ```
 
 ## How It Works
 
 - The workbench is the top-level orchestrator repo
 - Each worktree is a self-contained dev environment under `worktrees/`
-- Only the packages you specify are cloned and installed as editable
+- Only the packages you specify are cloned and installed as editable (via `uv add --editable --workspace`)
 - All other dependencies come from PyPI
 - Each worktree gets its own `.venv`
 
 ## Recipes
 
-| Recipe | Context | Description |
-|--------|---------|-------------|
-| `worktree-create <name> <repos...>` | root | Create a new worktree with specified packages |
-| `worktree-add <repos...>` | worktree | Add packages to an existing worktree |
-| `start` | worktree | Launch JupyterLab |
-| `build` | worktree | Rebuild frontend for all dev packages |
-| `worktree-status` | worktree | List dev-installed packages |
+### Workbench recipes (run from root)
+
+| Recipe | Description |
+|--------|-------------|
+| `worktree-add <name> <repos...>` | Create a new worktree with specified packages |
+| `worktree-remove <name>` | Remove a worktree |
+
+### Worktree recipes (run from `worktrees/<name>/`)
+
+| Recipe | Description |
+|--------|-------------|
+| `add-dev <repos...>` | Clone + editable install additional packages |
+| `add <pkgs...>` | Add a PyPI package (thin wrapper around `uv add`) |
+| `start` | Launch JupyterLab |
+| `worktree-status` | List dev-installed packages |
+
+### Repo recipes (run from inside a repo)
+
+| Recipe | Description |
+|--------|-------------|
+| `build` | Rebuild frontend for the current repo |
 
 ## Adding Repos
 
 Edit `repos.json` to add new repo name → git URL mappings.
+
+## Special Cases
+
+- `jupyter-chat`: The Python package lives at `jupyter-chat/python/jupyterlab-chat/`. The recipes handle this automatically.
