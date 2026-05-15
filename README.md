@@ -6,7 +6,7 @@ A lightweight Jupyter extension development orchestrator. Create parallel worktr
 
 ```bash
 # Create a worktree with specific packages for development
-just worktree-add my-feature jupyter-ai-acp-client jupyter-ai-persona-manager
+just worktree-add my-feature --dev jupyter-ai-acp-client jupyter-ai-persona-manager
 
 # Start JupyterLab from the worktree
 cd worktrees/my-feature
@@ -15,9 +15,12 @@ just start
 # Add another package later
 just add-dev jupyter-ai-router
 
+# Add a PyPI-only dependency
+just add httpx
+
 # Switch a branch before building
-cd jupyter-ai-acp-client && git checkout my-branch && cd ..
-just build  # from inside the repo
+cd jupyter-ai-acp-client && git checkout my-branch
+just build
 ```
 
 ## How It Works
@@ -30,14 +33,14 @@ just build  # from inside the repo
 
 ## Recipes
 
-### Workbench recipes (run from root)
+### Workbench recipes — can be run anywhere within the workbench
 
 | Recipe | Description |
 |--------|-------------|
-| `worktree-add <name> <repos...>` | Create a new worktree with specified packages |
+| `worktree-add <name> [--dev <repos...>] [--with <packages...>]` | Create a new worktree |
 | `worktree-remove <name>` | Remove a worktree |
 
-### Worktree recipes (run from `worktrees/<name>/`)
+### Worktree recipes — can be run anywhere within a worktree
 
 | Recipe | Description |
 |--------|-------------|
@@ -46,7 +49,7 @@ just build  # from inside the repo
 | `start` | Launch JupyterLab |
 | `worktree-status` | List dev-installed packages |
 
-### Repo recipes (run from inside a repo)
+### Repo recipes — can be run from inside a repo being developed in a worktree
 
 | Recipe | Description |
 |--------|-------------|
