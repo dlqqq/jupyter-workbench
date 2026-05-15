@@ -1,0 +1,7 @@
+worktrees/
+.venv/
+node_modules/
+.env
+*.egg-info/
+__pycache__/
+uv.lock
