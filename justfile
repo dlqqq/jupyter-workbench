@@ -7,7 +7,7 @@ root := justfile_directory()
 ################################################################################
 
 # Create a new worktree with specified repos for development
-worktree-create name +repos: _require_workbench_root
+worktree-add name +repos: _require_workbench_root
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -81,6 +81,18 @@ worktree-create name +repos: _require_workbench_root
     echo ""
     echo "✓ Worktree '{{name}}' ready at: $wt"
     echo "  cd $wt && just start"
+
+# Remove a worktree
+worktree-remove name: _require_workbench_root
+    #!/usr/bin/env bash
+    set -euo pipefail
+    wt="{{root}}/worktrees/{{name}}"
+    if [[ ! -d "$wt" ]]; then
+        echo "Error: worktree '{{name}}' not found" >&2
+        exit 1
+    fi
+    git worktree remove "$wt" --force
+    echo "✓ Removed worktree '{{name}}'"
 
 ################################################################################
 # Worktree recipes
