@@ -6,13 +6,38 @@ root := justfile_directory()
 # Workbench recipes
 ################################################################################
 
-# Create a new worktree with specified repos for development
-worktree-add name +repos: _require_workbench_root
+# Create a new worktree: just worktree-add <name> [--dev] <repos...> [--with <packages...>]
+worktree-add *args: _require_workbench_root
     #!/usr/bin/env bash
     set -euo pipefail
 
-    # Validate repo names
-    for repo in {{repos}}; do
+    # Parse arguments
+    name=""
+    dev_repos=()
+    with_pkgs=()
+    mode="dev"
+
+    for arg in {{args}}; do
+        case "$arg" in
+            --dev)  mode="dev"; continue ;;
+            --with) mode="with"; continue ;;
+        esac
+        if [[ -z "$name" ]]; then
+            name="$arg"
+        elif [[ "$mode" == "dev" ]]; then
+            dev_repos+=("$arg")
+        else
+            with_pkgs+=("$arg")
+        fi
+    done
+
+    if [[ -z "$name" ]] || [[ ${#dev_repos[@]} -eq 0 && ${#with_pkgs[@]} -eq 0 ]]; then
+        echo "Usage: just worktree-add <name> [--dev] <repos...> [--with <packages...>]" >&2
+        exit 1
+    fi
+
+    # Validate dev repo names
+    for repo in "${dev_repos[@]}"; do
         url=$(jq -r --arg r "$repo" '.[$r] // empty' "{{root}}/repos.json")
         if [[ -z "$url" ]]; then
             echo "Error: '$repo' not found in repos.json" >&2
@@ -21,9 +46,9 @@ worktree-add name +repos: _require_workbench_root
         fi
     done
 
-    wt="{{root}}/worktrees/{{name}}"
+    wt="{{root}}/worktrees/$name"
     if [[ -d "$wt" ]]; then
-        echo "Error: worktree '{{name}}' already exists at $wt" >&2
+        echo "Error: worktree '$name' already exists at $wt" >&2
         exit 1
     fi
 
@@ -37,26 +62,31 @@ worktree-add name +repos: _require_workbench_root
     # Write marker
     touch "$wt/.is_worktree"
 
-    # Clone repos and add as editable workspace members
     cd "$wt"
-    for repo in {{repos}}; do
+
+    # Clone and dev-install repos
+    for repo in "${dev_repos[@]}"; do
         url=$(jq -r --arg r "$repo" '.[$r]' "{{root}}/repos.json")
         echo "Cloning $repo..."
         git clone "$url" "$repo"
 
-        # Determine the package path within the repo
         if [[ "$repo" == "jupyter-chat" ]]; then
             pkg_path="./jupyter-chat/python/jupyterlab-chat"
         else
             pkg_path="./$repo"
         fi
 
-        # Add to workspace members, then let uv handle the rest
         uv add --editable --workspace "$pkg_path"
     done
 
-    # Build and enable extensions
-    for repo in {{repos}}; do
+    # Install --with packages from PyPI
+    if [[ ${#with_pkgs[@]} -gt 0 ]]; then
+        echo "Adding PyPI packages: ${with_pkgs[*]}"
+        uv add "${with_pkgs[@]}"
+    fi
+
+    # Build and enable extensions for dev repos
+    for repo in "${dev_repos[@]}"; do
         if [[ "$repo" == "jupyter-chat" ]]; then
             pkg_dir="jupyter-chat/python/jupyterlab-chat"
         else
@@ -79,7 +109,7 @@ worktree-add name +repos: _require_workbench_root
     done
 
     echo ""
-    echo "✓ Worktree '{{name}}' ready at: $wt"
+    echo "✓ Worktree '$name' ready at: $wt"
     echo "  cd $wt && just start"
 
 # Remove a worktree
