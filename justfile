@@ -9,7 +9,7 @@ root := justfile_directory()
 # Create a new worktree: just worktree-add <name> [--dev] <repos...> [--with <packages...>]
 worktree-add *args: _require_workbench_root
     #!/usr/bin/env bash
-    set -euo pipefail
+    set -eo pipefail
 
     # Parse arguments
     name=""
@@ -31,8 +31,8 @@ worktree-add *args: _require_workbench_root
         fi
     done
 
-    if [[ -z "$name" ]] || [[ ${#dev_repos[@]} -eq 0 && ${#with_pkgs[@]} -eq 0 ]]; then
-        echo "Usage: just worktree-add <name> [--dev] <repos...> [--with <packages...>]" >&2
+    if [[ -z "$name" ]]; then
+        echo "Usage: just worktree-add <name> [--dev <repos...>] [--with <packages...>]" >&2
         exit 1
     fi
 
