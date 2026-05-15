@@ -2,8 +2,12 @@ set dotenv-load
 
 root := justfile_directory()
 
+################################################################################
+# Workbench recipes
+################################################################################
+
 # Create a new worktree with specified repos for development
-worktree-create name +repos:
+worktree-create name +repos: _require_workbench_root
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -27,23 +31,29 @@ worktree-create name +repos:
     mkdir -p "{{root}}/worktrees"
     git worktree add --detach "$wt"
 
+    # Copy latest justfile into worktree
+    cp "{{root}}/justfile" "$wt/justfile"
+
     # Write marker
     touch "$wt/.is_worktree"
 
-    # Clone repos
+    # Clone repos and add as editable workspace members
+    cd "$wt"
     for repo in {{repos}}; do
         url=$(jq -r --arg r "$repo" '.[$r]' "{{root}}/repos.json")
         echo "Cloning $repo..."
-        git clone "$url" "$wt/$repo"
+        git clone "$url" "$repo"
+
+        # Determine the package path within the repo
+        if [[ "$repo" == "jupyter-chat" ]]; then
+            pkg_path="./jupyter-chat/python/jupyterlab-chat"
+        else
+            pkg_path="./$repo"
+        fi
+
+        # Add to workspace members, then let uv handle the rest
+        uv add --editable --workspace "$pkg_path"
     done
-
-    # Patch pyproject.toml
-    cd "$wt"
-    python3 "{{root}}/scripts/patch_pyproject.py" {{repos}}
-
-    # uv sync
-    echo "Running uv sync..."
-    uv sync
 
     # Build and enable extensions
     for repo in {{repos}}; do
@@ -72,15 +82,18 @@ worktree-create name +repos:
     echo "✓ Worktree '{{name}}' ready at: $wt"
     echo "  cd $wt && just start"
 
-# Add repos to an existing worktree
-worktree-add +repos:
+################################################################################
+# Worktree recipes
+################################################################################
+
+# Add a package via uv (same as 'uv add')
+add +pkgs: _require_worktree
+    uv add {{pkgs}}
+
+# Add a package as editable (clone, build, dev-install)
+add-dev +repos: _require_worktree
     #!/usr/bin/env bash
     set -euo pipefail
-
-    if [[ ! -f .is_worktree ]]; then
-        echo "Error: not in a worktree. Run this from inside worktrees/<name>/" >&2
-        exit 1
-    fi
 
     # Validate repo names
     for repo in {{repos}}; do
@@ -95,19 +108,20 @@ worktree-add +repos:
         fi
     done
 
-    # Clone repos
+    # Clone repos and add as editable workspace members
     for repo in {{repos}}; do
         url=$(jq -r --arg r "$repo" '.[$r]' "{{root}}/repos.json")
         echo "Cloning $repo..."
         git clone "$url" "$repo"
+
+        if [[ "$repo" == "jupyter-chat" ]]; then
+            pkg_path="./jupyter-chat/python/jupyterlab-chat"
+        else
+            pkg_path="./$repo"
+        fi
+
+        uv add --editable --workspace "$pkg_path"
     done
-
-    # Patch pyproject.toml
-    python3 "{{root}}/scripts/patch_pyproject.py" {{repos}}
-
-    # uv sync
-    echo "Running uv sync..."
-    uv sync
 
     # Build and enable extensions
     for repo in {{repos}}; do
@@ -121,7 +135,7 @@ worktree-add +repos:
 
         if [[ -f "$pkg_dir/package.json" ]]; then
             echo "Building $repo frontend..."
-            (cd "$pkg_dir" && uv run --project "$(pwd)" jlpm && uv run --project "$(pwd)" jlpm build)
+            (cd "$pkg_dir" && uv run --project "$(pwd)/.." jlpm && uv run --project "$(pwd)/.." jlpm build)
         fi
 
         echo "Enabling server extension: $pkg_name"
@@ -136,36 +150,69 @@ worktree-add +repos:
     echo "✓ Added: {{repos}}"
 
 # Start JupyterLab
-start *args:
+start *args: _require_worktree
     uv run jupyter lab --config={{root}}/jupyter_server_config.py {{args}}
 
-# Rebuild frontend for all dev packages in this worktree
-build:
+# Show which packages are dev-installed in this worktree
+worktree-status: _require_worktree
+    #!/usr/bin/env bash
+    echo "Dev-installed packages:"
+    grep 'editable = true' pyproject.toml | cut -d= -f1 | sed 's/^/  /'
+
+################################################################################
+# Repo recipes
+################################################################################
+
+# Rebuild frontend for the current repo
+build: _require_worktree_repo
     #!/usr/bin/env bash
     set -euo pipefail
-    if [[ ! -f .is_worktree ]]; then
-        echo "Error: not in a worktree" >&2
+    cd {{ invocation_directory() }}
+    # Walk up to find worktree root
+    wt_root="$(pwd)"
+    while [[ ! -f "$wt_root/.is_worktree" ]]; do
+        wt_root="$(dirname "$wt_root")"
+    done
+    uv run --project "$wt_root" jlpm build
+
+################################################################################
+# Internal helpers
+################################################################################
+
+# Exits 0 if at the workbench root
+_require_workbench_root:
+    #!/usr/bin/env bash
+    if [[ -f .is_worktree ]]; then
+        echo "Error: this command must be run from the workbench root, not a worktree" >&2
         exit 1
     fi
-    for repo in $(jq -r 'keys[]' "{{root}}/repos.json"); do
-        if [[ "$repo" == "jupyter-chat" ]]; then
-            pkg_dir="jupyter-chat/python/jupyterlab-chat"
-        else
-            pkg_dir="$repo"
-        fi
-        if [[ -d "$pkg_dir" && -f "$pkg_dir/package.json" ]]; then
-            echo "Building $repo..."
-            (cd "$pkg_dir" && uv run --project "$(pwd)/.." jlpm build)
-        fi
-    done
+    toplevel="$(git rev-parse --show-toplevel 2>/dev/null)"
+    if [[ -z "$toplevel" ]] || ! grep -q 'name = "jupyter-workbench"' "$toplevel/pyproject.toml" 2>/dev/null; then
+        echo "Error: this command must be run from the workbench root" >&2
+        exit 1
+    fi
 
-# Show which packages are dev-installed in this worktree
-worktree-status:
+# Exits 0 if at a worktree root (has .is_worktree in cwd)
+_require_worktree:
     #!/usr/bin/env bash
     if [[ ! -f .is_worktree ]]; then
-        echo "Error: not in a worktree" >&2
+        echo "Error: not in a worktree root. Run this from worktrees/<name>/" >&2
         exit 1
     fi
-    echo "Dev-installed packages:"
-    sed -n '/# --- workspace packages (editable) ---/,/^\]/p' pyproject.toml \
-        | grep -v '^\]' | grep -v '# ---' | sed 's/[", ]//g' | grep -v '^$' | sed 's/^/  /'
+
+# Exits 0 if inside a repo under a worktree (not at the worktree root itself)
+_require_worktree_repo:
+    #!/usr/bin/env bash
+    if [[ -f .is_worktree ]]; then
+        echo "Error: run this from inside a repo, not the worktree root" >&2
+        exit 1
+    fi
+    dir="$(pwd)"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -f "$dir/.is_worktree" ]]; then
+            exit 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+    echo "Error: not inside a worktree repo. Run this from within worktrees/<name>/<repo>/..." >&2
+    exit 1
