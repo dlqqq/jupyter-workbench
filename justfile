@@ -7,6 +7,7 @@ root := justfile_directory()
 ################################################################################
 
 # Create a new worktree: just worktree-add <name> [--dev] <repos...> [--with <packages...>]
+[group('workbench')]
 worktree-add *args:
     #!/usr/bin/env bash
     set -eo pipefail
@@ -115,6 +116,7 @@ worktree-add *args:
     echo "  cd $wt && just start"
 
 # Remove a worktree
+[group('workbench')]
 worktree-remove name:
     #!/usr/bin/env bash
     set -eo pipefail
@@ -133,6 +135,7 @@ worktree-remove name:
 ################################################################################
 
 # Add a package via uv (same as 'uv add')
+[group('worktree')]
 add +pkgs:
     #!/usr/bin/env bash
     set -eo pipefail
@@ -141,6 +144,7 @@ add +pkgs:
     uv add {{pkgs}}
 
 # Add a package as editable (clone, build, dev-install)
+[group('worktree')]
 add-dev +repos:
     #!/usr/bin/env bash
     set -eo pipefail
@@ -203,6 +207,7 @@ add-dev +repos:
     echo "✓ Added: {{repos}}"
 
 # Start JupyterLab
+[group('worktree')]
 start *args:
     #!/usr/bin/env bash
     set -eo pipefail
@@ -212,6 +217,7 @@ start *args:
     uv run jupyter lab --config="$wb_root/jupyter_server_config.py" {{args}}
 
 # Show which packages are dev-installed in this worktree
+[group('worktree')]
 worktree-status:
     #!/usr/bin/env bash
     wt_root=$(just _get_worktree_root)
@@ -223,6 +229,7 @@ worktree-status:
 ################################################################################
 
 # Rebuild frontend for the current repo
+[group('repo')]
 build:
     #!/usr/bin/env bash
     set -eo pipefail
