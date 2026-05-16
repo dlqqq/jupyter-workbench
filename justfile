@@ -1,6 +1,5 @@
 set dotenv-load
 
-root := justfile_directory()
 helpers := justfile_directory() / "scripts/helpers.sh"
 invocation := invocation_directory()
 
