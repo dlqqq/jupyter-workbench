@@ -18,8 +18,8 @@ just add-dev jupyter-ai-router
 # Add a PyPI-only dependency
 just add httpx
 
-# Switch a branch before building
-cd jupyter-ai-acp-client && git checkout my-branch
+# Rebuild a single repo's frontend after changes
+cd jupyter-ai-acp-client
 just build
 ```
 
@@ -33,32 +33,83 @@ just build
 
 ## Recipes
 
-### Workbench recipes — can be run anywhere within the workbench
+### Workbench recipes
+
+Workbench recipes can be run from anywhere within the workbench.
 
 | Recipe | Description |
 |--------|-------------|
 | `worktree-add <name> [--dev <repos...>] [--with <packages...>]` | Create a new worktree |
 | `worktree-remove <name>` | Remove a worktree |
 
-### Worktree recipes — can be run anywhere within a worktree
+### Worktree recipes
+
+Worktree recipes can be run from anywhere within a specific worktree
+(`worktrees/<worktree-name>`).
 
 | Recipe | Description |
 |--------|-------------|
-| `add-dev <repos...>` | Clone + editable install additional packages |
-| `add <pkgs...>` | Add a PyPI package (thin wrapper around `uv add`) |
+| `add-dev <repo>` | Clone + editable install a package |
+| `add <pkgs...>` | Add PyPI packages (wrapper around `uv add`) |
+| `sync` | Sync the venv (`uv sync`) |
 | `start` | Launch JupyterLab |
 | `worktree-status` | List dev-installed packages |
+| `enable-all-extensions` | Enable extensions for all dev repos |
 
-### Repo recipes — can be run from inside a repo being developed in a worktree
+### Repo recipes — run from inside a repo (`[no-cd]`)
+
+Repository recipes can be run from anywhere within a repository checked out
+inside of a worktree (e.g. `worktrees/jupyter-ai-issue-123/jupyter-ai-router`).
 
 | Recipe | Description |
 |--------|-------------|
 | `build` | Rebuild frontend for the current repo |
+| `enable-repo-extensions` | Enable server + lab extensions |
+| `enable-repo-server-extensions` | Enable server extension only |
+| `enable-repo-lab-extensions` | Enable lab extension only |
 
-## Adding Repos
+## Configuration
 
-Edit `repos.json` to add new repo name → git URL mappings.
+### `repos.json`
 
-## Special Cases
+Maps repo names to git URLs and optional package metadata:
 
-- `jupyter-chat`: The Python package lives at `jupyter-chat/python/jupyterlab-chat/`. The recipes handle this automatically.
+```json
+{
+  "jupyter-ai-router": { "url": "git@github.com:jupyter-ai-contrib/jupyter-ai-router.git" },
+  "jupyter-chat": {
+    "url": "git@github.com:jupyterlab/jupyter-chat.git",
+    "packages": [
+      { "name": "jupyterlab_chat", "parentDir": "python/jupyterlab-chat" }
+    ]
+  }
+}
+```
+
+When `packages` is absent, defaults are:
+- `name` = repo name with `-` replaced by `_`
+- `parentDir` = `.`
+
+### `.worktree_info`
+
+Each worktree contains a `.worktree_info` file listing dev-installed repos (one
+per line). This is managed automatically by `worktree-add` and `add-dev`.
+
+## Architecture
+
+```
+jupyter-workbench/              ← workbench root
+├── justfile
+├── scripts/helpers.sh          ← shared bash functions
+├── repos.json                  ← repo registry
+├── repos.schema.json           ← JSON schema for repos.json
+├── pyproject.toml              ← base deps (jupyterlab)
+├── jupyter_server_config.py
+└── worktrees/
+    └── my-feature/             ← a worktree
+        ├── .worktree_info      ← lists dev repos
+        ├── .venv/
+        ├── pyproject.toml      ← patched by uv
+        ├── jupyter-ai-router/  ← cloned repo (editable)
+        └── jupyter-chat/       ← cloned repo (editable)
+```
