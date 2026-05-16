@@ -1,4 +1,4 @@
-set dotenv-load
+set dotenv-load := true
 
 helpers := justfile_directory() / "scripts/helpers.sh"
 invocation := invocation_directory()
@@ -12,8 +12,8 @@ invocation := invocation_directory()
 worktree-add *args:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_workbench_root "{{invocation}}" || exit 1
+    source "{{ helpers }}"
+    get_workbench_root "{{ invocation }}" || exit 1
     cd "$WB_ROOT"
 
     # Parse arguments
@@ -22,7 +22,7 @@ worktree-add *args:
     with_pkgs=()
     mode="dev"
 
-    for arg in {{args}}; do
+    for arg in {{ args }}; do
         case "$arg" in
             --dev)  mode="dev"; continue ;;
             --with) mode="with"; continue ;;
@@ -43,7 +43,7 @@ worktree-add *args:
 
     # Validate dev repo names
     for repo in "${dev_repos[@]}"; do
-        url=$(jq -r --arg r "$repo" '.[$r] // empty' "$WB_ROOT/repos.json")
+        url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$WB_ROOT/repos.json")
         if [[ -z "$url" ]]; then
             echo "Error: '$repo' not found in repos.json" >&2
             echo "Available repos: $(jq -r 'keys[]' "$WB_ROOT/repos.json" | tr '\n' ' ')" >&2
@@ -73,7 +73,7 @@ worktree-add *args:
 
     # Clone and dev-install repos
     for repo in "${dev_repos[@]}"; do
-        url=$(jq -r --arg r "$repo" '.[$r]' "$WB_ROOT/repos.json")
+        url=$(jq -r --arg r "$repo" '.[$r].url' "$WB_ROOT/repos.json")
         echo "Cloning $repo..."
         git clone "$url" "$repo"
 
@@ -93,27 +93,27 @@ worktree-add *args:
     fi
 
     # Build and enable extensions for dev repos
-    for repo in "${dev_repos[@]}"; do
-        if [[ "$repo" == "jupyter-chat" ]]; then
-            pkg_dir="jupyter-chat/python/jupyterlab-chat"
-        else
-            pkg_dir="$repo"
-        fi
-        pkg_toml="$pkg_dir/pyproject.toml"
-        pkg_name=$(grep -m1 '^name' "$pkg_toml" | sed 's/name = "//;s/"//')
+    # for repo in "${dev_repos[@]}"; do
+    #     if [[ "$repo" == "jupyter-chat" ]]; then
+    #         pkg_dir="jupyter-chat/python/jupyterlab-chat"
+    #     else
+    #         pkg_dir="$repo"
+    #     fi
+    #     pkg_toml="$pkg_dir/pyproject.toml"
+    #     pkg_name=$(grep -m1 '^name' "$pkg_toml" | sed 's/name = "//;s/"//')
 
-        if [[ -f "$pkg_dir/package.json" ]]; then
-            echo "Building $repo frontend..."
-            (cd "$pkg_dir" && uv run --project "$wt" jlpm && uv run --project "$wt" jlpm build)
-        fi
+    #     if [[ -f "$pkg_dir/package.json" ]]; then
+    #         echo "Building $repo frontend..."
+    #         (cd "$pkg_dir" && uv run --project "$wt" jlpm && uv run --project "$wt" jlpm build)
+    #     fi
 
-        echo "Enabling server extension: $pkg_name"
-        uv run jupyter server extension enable "$pkg_name" 2>/dev/null || true
+    #     echo "Enabling server extension: $pkg_name"
+    #     uv run jupyter server extension enable "$pkg_name" 2>/dev/null || true
 
-        if [[ -f "$pkg_dir/package.json" ]]; then
-            (cd "$pkg_dir" && uv run --project "$wt" jupyter labextension develop . --overwrite) 2>/dev/null || true
-        fi
-    done
+    #     if [[ -f "$pkg_dir/package.json" ]]; then
+    #         (cd "$pkg_dir" && uv run --project "$wt" jupyter labextension develop . --overwrite) 2>/dev/null || true
+    #     fi
+    # done
 
     echo ""
     echo "✓ Worktree '$name' ready at: $wt"
@@ -124,16 +124,16 @@ worktree-add *args:
 worktree-remove name:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_workbench_root "{{invocation}}" || exit 1
-    wt="$WB_ROOT/worktrees/{{name}}"
+    source "{{ helpers }}"
+    get_workbench_root "{{ invocation }}" || exit 1
+    wt="$WB_ROOT/worktrees/{{ name }}"
     if [[ ! -d "$wt" ]]; then
-        echo "Error: worktree '{{name}}' not found" >&2
+        echo "Error: worktree '{{ name }}' not found" >&2
         exit 1
     fi
     cd "$WB_ROOT"
     git worktree remove "$wt" --force
-    echo "✓ Removed worktree '{{name}}'"
+    echo "✓ Removed worktree '{{ name }}'"
 
 ################################################################################
 # Worktree recipes (can be run anywhere within a worktree)
@@ -144,24 +144,24 @@ worktree-remove name:
 add +pkgs:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_worktree_root "{{invocation}}" || exit 1
+    source "{{ helpers }}"
+    get_worktree_root "{{ invocation }}" || exit 1
     cd "$WT_ROOT"
-    uv add {{pkgs}}
+    uv add {{ pkgs }}
 
 # Add a package as editable (clone, build, dev-install)
 [group('worktree')]
 add-dev +repos:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_worktree_root "{{invocation}}" || exit 1
-    get_workbench_root "{{invocation}}" || exit 1
+    source "{{ helpers }}"
+    get_worktree_root "{{ invocation }}" || exit 1
+    get_workbench_root "{{ invocation }}" || exit 1
     cd "$WT_ROOT"
 
     # Validate repo names
-    for repo in {{repos}}; do
-        url=$(jq -r --arg r "$repo" '.[$r] // empty' "$WB_ROOT/repos.json")
+    for repo in {{ repos }}; do
+        url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$WB_ROOT/repos.json")
         if [[ -z "$url" ]]; then
             echo "Error: '$repo' not found in repos.json" >&2
             exit 1
@@ -173,8 +173,8 @@ add-dev +repos:
     done
 
     # Clone repos and add as editable workspace members
-    for repo in {{repos}}; do
-        url=$(jq -r --arg r "$repo" '.[$r]' "$WB_ROOT/repos.json")
+    for repo in {{ repos }}; do
+        url=$(jq -r --arg r "$repo" '.[$r].url' "$WB_ROOT/repos.json")
         echo "Cloning $repo..."
         git clone "$url" "$repo"
 
@@ -188,7 +188,7 @@ add-dev +repos:
     done
 
     # Build and enable extensions
-    for repo in {{repos}}; do
+    for repo in {{ repos }}; do
         if [[ "$repo" == "jupyter-chat" ]]; then
             pkg_dir="jupyter-chat/python/jupyterlab-chat"
         else
@@ -211,25 +211,25 @@ add-dev +repos:
     done
 
     echo ""
-    echo "✓ Added: {{repos}}"
+    echo "✓ Added: {{ repos }}"
 
 # Start JupyterLab
 [group('worktree')]
 start *args:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_worktree_root "{{invocation}}" || exit 1
-    get_workbench_root "{{invocation}}" || exit 1
+    source "{{ helpers }}"
+    get_worktree_root "{{ invocation }}" || exit 1
+    get_workbench_root "{{ invocation }}" || exit 1
     cd "$WT_ROOT"
-    uv run jupyter lab --config="$WB_ROOT/jupyter_server_config.py" {{args}}
+    uv run jupyter lab --config="$WB_ROOT/jupyter_server_config.py" {{ args }}
 
 # Show which packages are dev-installed in this worktree
 [group('worktree')]
 worktree-status:
     #!/usr/bin/env bash
-    source "{{helpers}}"
-    get_worktree_root "{{invocation}}" || exit 1
+    source "{{ helpers }}"
+    get_worktree_root "{{ invocation }}" || exit 1
     echo "Dev-installed packages:"
     grep 'editable = true' "$WT_ROOT/pyproject.toml" | cut -d= -f1 | sed 's/^/  /'
 
@@ -242,7 +242,7 @@ worktree-status:
 build:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_worktree_repo "{{invocation}}" || exit 1
+    source "{{ helpers }}"
+    get_worktree_repo "{{ invocation }}" || exit 1
     cd "$REPO_ROOT"
     uv run --project "$WT_ROOT" jlpm build

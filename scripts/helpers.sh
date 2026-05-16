@@ -50,3 +50,33 @@ get_worktree_repo() {
     echo "Error: not inside a repo within this worktree" >&2
     return 1
 }
+
+# Sets: PKG_NAMES (array of Python package names for this repo)
+# Requires: WB_ROOT, REPO_NAME to be set
+get_repo_package_names() {
+    local json="$WB_ROOT/repos.json"
+    local raw
+    raw=$(jq -r --arg r "$REPO_NAME" '
+        .[$r].packages // [{"name": ($r | gsub("-";"_"))}]
+        | .[].name
+    ' "$json")
+    PKG_NAMES=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && PKG_NAMES+=("$line")
+    done <<< "$raw"
+}
+
+# Sets: PKG_PARENT_DIRS (array of paths from repo root to pyproject.toml dirs)
+# Requires: WB_ROOT, REPO_NAME to be set
+get_repo_parent_dirs() {
+    local json="$WB_ROOT/repos.json"
+    local raw
+    raw=$(jq -r --arg r "$REPO_NAME" '
+        .[$r].packages // [{"parentDir": "."}]
+        | .[].parentDir
+    ' "$json")
+    PKG_PARENT_DIRS=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && PKG_PARENT_DIRS+=("$line")
+    done <<< "$raw"
+}
