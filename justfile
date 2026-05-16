@@ -139,6 +139,22 @@ worktree-remove-all:
     rm -rf worktrees
     echo "✓ All worktrees removed"
 
+# Sync justfile and scripts to all worktrees
+[group('workbench')]
+sync-recipes:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_workbench_root "$PWD" || exit 1
+    for wt in "$WB_ROOT"/worktrees/*/; do
+        [[ -d "$wt" ]] || continue
+        name=$(basename "$wt")
+        cp "$WB_ROOT/justfile" "$wt/justfile"
+        rm -rf "$wt/scripts"
+        cp -r "$WB_ROOT/scripts" "$wt/scripts"
+        echo "✓ $name"
+    done
+
 ################################################################################
 # Worktree recipes (can be run anywhere within a worktree)
 ################################################################################
@@ -204,7 +220,46 @@ start *args:
     set -eo pipefail
     source "{{ helpers }}"
     get_worktree_root "$PWD" || exit 1
+    check_no_server_running || exit 1
     uv run jupyter lab --config="./jupyter_server_config.py" {{ args }}
+
+# Start JupyterLab in a new tab and open browser to the right (cmux only)
+[group('worktree')]
+start-cmux:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_worktree_root "$PWD" || exit 1
+    check_no_server_running || exit 1
+
+    # Get current pane
+    pane=$(cmux identify --json | jq -r '.caller.pane_ref')
+
+    # Start server in a new terminal tab (same pane, no browser)
+    surface_json=$(cmux new-surface --workspace "${CMUX_WORKSPACE_ID}" --pane "$pane" --type terminal --focus false --json)
+    surface=$(echo "$surface_json" | jq -r '.surface_ref')
+
+    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$surface" "cd $WT_ROOT && just start --no-browser\n"
+
+    # Wait for server to start, then get the URL with token
+    echo "Waiting for server to start..."
+    for i in {1..30}; do
+        sleep 1
+        url=$(uv run jupyter server list --jsonlist 2>/dev/null | jq -r '.[0].url // empty')
+        token=$(uv run jupyter server list --jsonlist 2>/dev/null | jq -r '.[0].token // empty')
+        if [[ -n "$url" && -n "$token" ]]; then
+            break
+        fi
+    done
+
+    if [[ -z "$url" ]]; then
+        echo "Error: server did not start within 30 seconds" >&2
+        exit 1
+    fi
+
+    # Open browser with token
+    cmux browser open "${url}lab?token=${token}" --workspace "${CMUX_WORKSPACE_ID}"
+    echo "✓ JupyterLab running at ${url}lab?token=${token}"
 
 # Show which packages are dev-installed in this worktree
 [group('worktree')]

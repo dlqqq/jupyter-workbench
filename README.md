@@ -41,6 +41,8 @@ Workbench recipes can be run from anywhere within the workbench.
 |--------|-------------|
 | `worktree-add <name> [--dev <repos...>] [--with <packages...>]` | Create a new worktree |
 | `worktree-remove <name>` | Remove a worktree |
+| `worktree-remove-all` | Remove all worktrees |
+| `sync-recipes` | Sync justfile and scripts to all worktrees |
 
 ### Worktree recipes
 
@@ -53,6 +55,7 @@ Worktree recipes can be run from anywhere within a specific worktree
 | `add <pkgs...>` | Add PyPI packages (wrapper around `uv add`) |
 | `sync` | Sync the venv (`uv sync`) |
 | `start` | Launch JupyterLab |
+| `start-cmux` | Start JupyterLab in a new tab + open browser to the right (cmux only) |
 | `worktree-status` | List dev-installed packages |
 | `enable-all-extensions` | Enable extensions for all dev repos |
 
@@ -113,3 +116,7 @@ jupyter-workbench/              ← workbench root
         ├── jupyter-ai-router/  ← cloned repo (editable)
         └── jupyter-chat/       ← cloned repo (editable)
 ```
+
+## TODO
+
+- [ ] Make spawned agent CLI configurable (support Codex, Claude Code, etc. in addition to Kiro)

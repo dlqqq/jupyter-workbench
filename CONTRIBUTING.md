@@ -8,8 +8,8 @@ Recipes are organized into three groups based on where they can be run:
 
 | Group | Runs from | `$PWD` is | Example |
 |-------|-----------|-----------|---------|
-| **workbench** | Workbench root | Workbench root | `worktree-add`, `worktree-remove` |
-| **worktree** | Worktree root | Worktree root | `add-dev`, `start`, `enable-all-extensions` |
+| **workbench** | Workbench root | Workbench root | `worktree-add`, `worktree-remove`, `sync-recipes` |
+| **worktree** | Worktree root | Worktree root | `add-dev`, `start`, `start-cmux`, `enable-all-extensions` |
 | **repo** | Inside a repo | Repo dir (via `[no-cd]`) | `build`, `enable-repo-extensions` |
 
 ## Working Directory Conventions
