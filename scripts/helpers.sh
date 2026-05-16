@@ -33,7 +33,7 @@ get_worktree_root() {
 
 # Sets: REPO_ROOT, REPO_NAME
 get_worktree_repo() {
-    local dir="$1"
+    local dir="${REPO_DIR:-$1}"
     get_worktree_root "$dir" || return 1
     if [[ "$dir" == "$WT_ROOT" ]]; then
         echo "Error: run this from inside a repo, not the worktree root" >&2

@@ -210,6 +210,21 @@ worktree-status:
     echo "Dev-installed packages:"
     grep 'editable = true' "$WT_ROOT/pyproject.toml" | cut -d= -f1 | sed 's/^/  /'
 
+# Enable extensions for all dev-installed repos in this worktree
+[group('worktree')]
+enable-all-extensions:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{helpers}}"
+    get_worktree_root "{{invocation}}" || exit 1
+    get_workbench_root "{{invocation}}" || exit 1
+    for repo in $(jq -r 'keys[]' "$WB_ROOT/repos.json"); do
+        if [[ -d "$WT_ROOT/$repo" ]]; then
+            echo "=== $repo ==="
+            REPO_DIR="$WT_ROOT/$repo" just --justfile "$WT_ROOT/justfile" --working-directory "$WT_ROOT/$repo" enable-repo-extensions
+        fi
+    done
+
 ################################################################################
 # Repo recipes (can only be run from inside a repo within a worktree)
 ################################################################################
@@ -226,7 +241,13 @@ build:
 
 # Enable all extensions for this repo
 [group('repo')]
-enable-repo-extensions: enable-repo-server-extensions enable-repo-lab-extensions
+enable-repo-extensions:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{helpers}}"
+    get_worktree_repo "{{invocation}}" || exit 1
+    just --justfile "$WT_ROOT/justfile" --working-directory "$REPO_ROOT" enable-repo-server-extensions
+    just --justfile "$WT_ROOT/justfile" --working-directory "$REPO_ROOT" enable-repo-lab-extensions
 
 # Enable server extension(s) for this repo
 [group('repo')]
