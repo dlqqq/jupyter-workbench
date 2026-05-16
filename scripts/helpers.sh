@@ -21,7 +21,7 @@ get_workbench_root() {
 get_worktree_root() {
     local dir="$1"
     while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/.is_worktree" ]]; then
+        if [[ -f "$dir/.worktree_info" ]]; then
             WT_ROOT="$dir"
             return 0
         fi
@@ -49,6 +49,15 @@ get_worktree_repo() {
     done
     echo "Error: not inside a repo within this worktree" >&2
     return 1
+}
+
+# Sets: WT_REPOS (array of repo names in this worktree)
+# Requires: WT_ROOT to be set
+get_worktree_repos() {
+    WT_REPOS=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && WT_REPOS+=("$line")
+    done < "$WT_ROOT/.worktree_info"
 }
 
 # Sets: PKG_NAMES (array of Python package names for this repo)

@@ -66,8 +66,11 @@ worktree-add *args:
     cp -r "$WB_ROOT/scripts" "$wt/scripts"
     [[ -f "$WB_ROOT/.env" ]] && cp "$WB_ROOT/.env" "$wt/.env"
 
-    # Write marker
-    touch "$wt/.is_worktree"
+    # Write worktree info with repo list
+    touch "$wt/.worktree_info"
+    for repo in "${dev_repos[@]}"; do
+        echo "$repo" >> "$wt/.worktree_info"
+    done
 
     cd "$wt"
 
@@ -187,6 +190,11 @@ add-dev +repos:
         uv add --editable --workspace "$pkg_path"
     done
 
+    # Update .worktree_info
+    for repo in {{repos}}; do
+        echo "$repo" >> "$WT_ROOT/.worktree_info"
+    done
+
     echo ""
     echo "✓ Added: {{ repos }}"
 
@@ -217,12 +225,10 @@ enable-all-extensions:
     set -eo pipefail
     source "{{helpers}}"
     get_worktree_root "{{invocation}}" || exit 1
-    get_workbench_root "{{invocation}}" || exit 1
-    for repo in $(jq -r 'keys[]' "$WB_ROOT/repos.json"); do
-        if [[ -d "$WT_ROOT/$repo" ]]; then
-            echo "=== $repo ==="
-            REPO_DIR="$WT_ROOT/$repo" just --justfile "$WT_ROOT/justfile" --working-directory "$WT_ROOT/$repo" enable-repo-extensions
-        fi
+    get_worktree_repos
+    for repo in "${WT_REPOS[@]}"; do
+        echo "=== $repo ==="
+        REPO_DIR="$WT_ROOT/$repo" just --justfile "$WT_ROOT/justfile" --working-directory "$WT_ROOT/$repo" enable-repo-extensions
     done
 
 ################################################################################
