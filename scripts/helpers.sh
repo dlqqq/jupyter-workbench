@@ -53,7 +53,7 @@ get_worktree_repo() {
 
 # Sets: PKG_NAMES (array of Python package names for this repo)
 # Requires: WB_ROOT, REPO_NAME to be set
-get_repo_package_names() {
+get_repo_pkg_names() {
     local json="$WB_ROOT/repos.json"
     local raw
     raw=$(jq -r --arg r "$REPO_NAME" '
@@ -68,7 +68,7 @@ get_repo_package_names() {
 
 # Sets: PKG_PARENT_DIRS (array of paths from repo root to pyproject.toml dirs)
 # Requires: WB_ROOT, REPO_NAME to be set
-get_repo_parent_dirs() {
+get_repo_pkg_parents() {
     local json="$WB_ROOT/repos.json"
     local raw
     raw=$(jq -r --arg r "$REPO_NAME" '

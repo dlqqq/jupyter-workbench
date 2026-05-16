@@ -233,10 +233,10 @@ enable-repo-extensions: enable-repo-server-extensions enable-repo-lab-extensions
 enable-repo-server-extensions:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_worktree_repo "{{invocation}}" || exit 1
-    get_workbench_root "{{invocation}}" || exit 1
-    get_repo_package_names
+    source "{{ helpers }}"
+    get_worktree_repo "{{ invocation }}" || exit 1
+    get_workbench_root "{{ invocation }}" || exit 1
+    get_repo_pkg_names
     cd "$WT_ROOT"
     for pkg_name in "${PKG_NAMES[@]}"; do
         echo "Enabling server extension: $pkg_name"
@@ -248,12 +248,12 @@ enable-repo-server-extensions:
 enable-repo-lab-extensions:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_worktree_repo "{{invocation}}" || exit 1
-    get_workbench_root "{{invocation}}" || exit 1
-    get_repo_parent_dirs
+    source "{{ helpers }}"
+    get_worktree_repo "{{ invocation }}" || exit 1
+    get_workbench_root "{{ invocation }}" || exit 1
+    get_repo_pkg_parents
     cd "$REPO_ROOT"
     for parent_dir in "${PKG_PARENT_DIRS[@]}"; do
-        echo "Enabling lab extension: $REPO_NAME/$parent_dir"
+        echo "Enabling lab extension in: $REPO_NAME/$parent_dir"
         (cd "$parent_dir" && uv run --project "$WT_ROOT" jupyter labextension develop . --overwrite) || true
     done
