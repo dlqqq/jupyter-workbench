@@ -187,29 +187,6 @@ add-dev +repos:
         uv add --editable --workspace "$pkg_path"
     done
 
-    # Build and enable extensions
-    for repo in {{ repos }}; do
-        if [[ "$repo" == "jupyter-chat" ]]; then
-            pkg_dir="jupyter-chat/python/jupyterlab-chat"
-        else
-            pkg_dir="$repo"
-        fi
-        pkg_toml="$pkg_dir/pyproject.toml"
-        pkg_name=$(grep -m1 '^name' "$pkg_toml" | sed 's/name = "//;s/"//')
-
-        if [[ -f "$pkg_dir/package.json" ]]; then
-            echo "Building $repo frontend..."
-            (cd "$pkg_dir" && uv run --project "$WT_ROOT" jlpm && uv run --project "$WT_ROOT" jlpm build)
-        fi
-
-        echo "Enabling server extension: $pkg_name"
-        uv run jupyter server extension enable "$pkg_name" 2>/dev/null || true
-
-        if [[ -f "$pkg_dir/package.json" ]]; then
-            (cd "$pkg_dir" && uv run --project "$WT_ROOT" jupyter labextension develop . --overwrite) 2>/dev/null || true
-        fi
-    done
-
     echo ""
     echo "✓ Added: {{ repos }}"
 
@@ -246,3 +223,37 @@ build:
     get_worktree_repo "{{ invocation }}" || exit 1
     cd "$REPO_ROOT"
     uv run --project "$WT_ROOT" jlpm build
+
+# Enable all extensions for this repo
+[group('repo')]
+enable-repo-extensions: enable-repo-server-extensions enable-repo-lab-extensions
+
+# Enable server extension(s) for this repo
+[group('repo')]
+enable-repo-server-extensions:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{helpers}}"
+    get_worktree_repo "{{invocation}}" || exit 1
+    get_workbench_root "{{invocation}}" || exit 1
+    get_repo_package_names
+    cd "$WT_ROOT"
+    for pkg_name in "${PKG_NAMES[@]}"; do
+        echo "Enabling server extension: $pkg_name"
+        uv run jupyter server extension enable "$pkg_name"
+    done
+
+# Enable lab extension(s) for this repo
+[group('repo')]
+enable-repo-lab-extensions:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{helpers}}"
+    get_worktree_repo "{{invocation}}" || exit 1
+    get_workbench_root "{{invocation}}" || exit 1
+    get_repo_parent_dirs
+    cd "$REPO_ROOT"
+    for parent_dir in "${PKG_PARENT_DIRS[@]}"; do
+        echo "Enabling lab extension: $REPO_NAME/$parent_dir"
+        (cd "$parent_dir" && uv run --project "$WT_ROOT" jupyter labextension develop . --overwrite) || true
+    done
