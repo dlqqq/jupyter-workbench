@@ -234,9 +234,9 @@ worktree-status:
 build:
     #!/usr/bin/env bash
     set -eo pipefail
-    just _require_worktree_repo
+    repo_root=$(just _get_worktree_repo)
     wt_root=$(just _get_worktree_root)
-    cd {{ invocation_directory() }}
+    cd "$repo_root"
     uv run --project "$wt_root" jlpm build
 
 ################################################################################
@@ -271,19 +271,21 @@ _get_worktree_root:
     echo "Error: not inside a worktree" >&2
     exit 1
 
-# Exits non-0 if not inside a repo under a worktree
-_require_worktree_repo:
+# Print the repo root path (walks up from invocation dir, finds first .git below worktree root)
+_get_worktree_repo:
     #!/usr/bin/env bash
-    if [[ -f .is_worktree ]]; then
+    wt_root=$(just _get_worktree_root)
+    dir="{{ invocation_directory() }}"
+    if [[ "$dir" == "$wt_root" ]]; then
         echo "Error: run this from inside a repo, not the worktree root" >&2
         exit 1
     fi
-    dir="$(pwd)"
-    while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/.is_worktree" ]]; then
+    while [[ "$dir" != "$wt_root" && "$dir" != "/" ]]; do
+        if [[ -d "$dir/.git" || -f "$dir/.git" ]]; then
+            echo "$dir"
             exit 0
         fi
         dir="$(dirname "$dir")"
     done
-    echo "Error: not inside a worktree repo. Run this from within worktrees/<name>/<repo>/..." >&2
+    echo "Error: not inside a repo within this worktree" >&2
     exit 1
