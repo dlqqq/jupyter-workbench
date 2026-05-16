@@ -191,7 +191,7 @@ add-dev +repos:
     done
 
     # Update .worktree_info
-    for repo in {{repos}}; do
+    for repo in {{ repos }}; do
         echo "$repo" >> "$WT_ROOT/.worktree_info"
     done
 
@@ -223,20 +223,26 @@ worktree-status:
 enable-all-extensions:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_worktree_root "{{invocation}}" || exit 1
+    source "{{ helpers }}"
+    get_worktree_root "{{ invocation }}" || exit 1
     get_worktree_repos
     for repo in "${WT_REPOS[@]}"; do
         echo "=== $repo ==="
-        REPO_DIR="$WT_ROOT/$repo" just --justfile "$WT_ROOT/justfile" --working-directory "$WT_ROOT/$repo" enable-repo-extensions
+        cd $repo
+        just enable-repo-extensions
     done
 
 ################################################################################
 # Repo recipes (can only be run from inside a repo within a worktree)
+#
+# These use [no-cd] so they run from the directory where `just` was invoked,
+# rather than justfile_directory(). This allows worktree recipes to
+# `cd $repo && just <repo-recipe>` and have it work correctly.
 ################################################################################
 
 # Rebuild frontend for the current repo
 [group('repo')]
+[no-cd]
 build:
     #!/usr/bin/env bash
     set -eo pipefail
@@ -247,16 +253,18 @@ build:
 
 # Enable all extensions for this repo
 [group('repo')]
+[no-cd]
 enable-repo-extensions:
     #!/usr/bin/env bash
     set -eo pipefail
-    source "{{helpers}}"
-    get_worktree_repo "{{invocation}}" || exit 1
-    just --justfile "$WT_ROOT/justfile" --working-directory "$REPO_ROOT" enable-repo-server-extensions
-    just --justfile "$WT_ROOT/justfile" --working-directory "$REPO_ROOT" enable-repo-lab-extensions
+    source "{{ helpers }}"
+    get_worktree_repo "{{ invocation }}" || exit 1
+    just enable-repo-server-extensions
+    just enable-repo-lab-extensions
 
 # Enable server extension(s) for this repo
 [group('repo')]
+[no-cd]
 enable-repo-server-extensions:
     #!/usr/bin/env bash
     set -eo pipefail
@@ -272,6 +280,7 @@ enable-repo-server-extensions:
 
 # Enable lab extension(s) for this repo
 [group('repo')]
+[no-cd]
 enable-repo-lab-extensions:
     #!/usr/bin/env bash
     set -eo pipefail
