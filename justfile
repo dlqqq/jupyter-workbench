@@ -122,6 +122,23 @@ worktree-remove name:
     git worktree remove "$wt" --force
     echo "✓ Removed worktree '{{ name }}'"
 
+# Remove all worktrees and start fresh
+[group('workbench')]
+worktree-remove-all:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_workbench_root "$PWD" || exit 1
+    cd "$WB_ROOT"
+    for wt in worktrees/*/; do
+        [[ -d "$wt" ]] || continue
+        name=$(basename "$wt")
+        echo "Removing $name..."
+        git worktree remove "$wt" --force
+    done
+    rm -rf worktrees
+    echo "✓ All worktrees removed"
+
 ################################################################################
 # Worktree recipes (can be run anywhere within a worktree)
 ################################################################################
