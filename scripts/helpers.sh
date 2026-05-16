@@ -7,7 +7,7 @@
 get_workbench_root() {
     local dir="$1"
     while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/repos.json" && ! -f "$dir/.is_worktree" ]]; then
+        if [[ -f "$dir/repos.json" && ! -f "$dir/.worktree_info" ]]; then
             WB_ROOT="$dir"
             return 0
         fi

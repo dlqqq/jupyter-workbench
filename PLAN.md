@@ -14,7 +14,7 @@ The current `jupyter-ai-devrepo` requires cloning all 13 submodules (~4.7GB) to 
 - JupyterLab always installed as a base dependency
 - Detached HEAD worktrees (no branching the orchestrator)
 - Automatic frontend build + extension enabling
-- `.is_worktree` marker file to identify worktree directories
+- `.worktree_info` file to identify worktree directories and list dev-installed repos
 - One justfile that works in both contexts (root for `subtree-create`, worktree for `subtree-add`/`start`/etc.)
 
 ## Structure
@@ -29,7 +29,7 @@ jupyter-workbench/                  ← the workbench (orchestrator repo)
 ├── jupyter_server_config.py
 └── worktrees/                      ← gitignored
     └── <name>/                     ← a worktree (disposable dev env)
-        ├── .is_worktree            ← marker file
+        ├── .worktree_info          ← repo list
         ├── .venv/
         ├── pyproject.toml          ← patched with workspace sources
         ├── jupyter-ai-acp-client/  ← git clone (editable)
@@ -110,7 +110,7 @@ c.YRoom.inactivity_timeout = 1
 
 1. Validate each repo name against `repos.json` using `jq`
 2. Run `git worktree add --detach ./worktrees/<name>`
-3. Write `.is_worktree` marker file in the worktree
+3. Write `.worktree_info` with repo names in the worktree
 4. Clone each specified repo into the worktree directory
 5. Patch `pyproject.toml` in the worktree:
    - Add packages under a `# --- workspace packages (editable) ---` comment in `[project.dependencies]`
@@ -127,7 +127,7 @@ c.YRoom.inactivity_timeout = 1
 
 `just subtree-add <repos...>` (only works inside a worktree):
 
-1. Guard with `[ -f .is_worktree ]` check
+1. Guard with `[ -f .worktree_info ]` check
 2. Validate repo names against `repos.json`
 3. Clone the new repos into the current worktree
 4. Patch `pyproject.toml` to add the new workspace packages
@@ -142,8 +142,8 @@ c.YRoom.inactivity_timeout = 1
 - `clean` — remove generated files
 
 Guards:
-- `subtree-add`, `subtree-status`, `build` require `.is_worktree`
-- `subtree-create` requires `.is_worktree` does NOT exist
+- `subtree-add`, `subtree-status`, `build` require `.worktree_info`
+- `subtree-create` requires `.worktree_info` does NOT exist
 
 ### Task 8: End-to-end test
 
