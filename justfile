@@ -80,13 +80,15 @@ worktree-add *args:
         echo "Cloning $repo..."
         git clone "$url" "$repo"
 
-        if [[ "$repo" == "jupyter-chat" ]]; then
-            pkg_path="./jupyter-chat/python/jupyterlab-chat"
-        else
-            pkg_path="./$repo"
-        fi
+        # Get package parent dirs from repos.json (default: ".")
+        pkg_parents=$(jq -r --arg r "$repo" '
+            .[$r].packages // [{"parentDir": "."}]
+            | .[].parentDir
+        ' "$WB_ROOT/repos.json")
 
-        uv add --editable --workspace "$pkg_path"
+        while IFS= read -r parent_dir; do
+            uv add --editable --workspace "./$repo/$parent_dir"
+        done <<< "$pkg_parents"
     done
 
     # Install --with packages from PyPI
@@ -95,28 +97,10 @@ worktree-add *args:
         uv add "${with_pkgs[@]}"
     fi
 
-    # Build and enable extensions for dev repos
-    # for repo in "${dev_repos[@]}"; do
-    #     if [[ "$repo" == "jupyter-chat" ]]; then
-    #         pkg_dir="jupyter-chat/python/jupyterlab-chat"
-    #     else
-    #         pkg_dir="$repo"
-    #     fi
-    #     pkg_toml="$pkg_dir/pyproject.toml"
-    #     pkg_name=$(grep -m1 '^name' "$pkg_toml" | sed 's/name = "//;s/"//')
-
-    #     if [[ -f "$pkg_dir/package.json" ]]; then
-    #         echo "Building $repo frontend..."
-    #         (cd "$pkg_dir" && uv run --project "$wt" jlpm && uv run --project "$wt" jlpm build)
-    #     fi
-
-    #     echo "Enabling server extension: $pkg_name"
-    #     uv run jupyter server extension enable "$pkg_name" 2>/dev/null || true
-
-    #     if [[ -f "$pkg_dir/package.json" ]]; then
-    #         (cd "$pkg_dir" && uv run --project "$wt" jupyter labextension develop . --overwrite) 2>/dev/null || true
-    #     fi
-    # done
+    # Enable extensions
+    if [[ ${#dev_repos[@]} -gt 0 ]]; then
+        just --justfile "$wt/justfile" --working-directory "$wt" enable-all-extensions
+    fi
 
     echo ""
     echo "✓ Worktree '$name' ready at: $wt"
@@ -236,8 +220,9 @@ enable-all-extensions:
 # Repo recipes (can only be run from inside a repo within a worktree)
 #
 # These use [no-cd] so they run from the directory where `just` was invoked,
-# rather than justfile_directory(). This allows worktree recipes to
-# `cd $repo && just <repo-recipe>` and have it work correctly.
+# rather than the default justfile_directory() (i.e. the worktree root). This
+# allows repo recipes to be invoked simply via `cd $repo && just <repo-recipe>`
+# in other higher-level recipes.
 ################################################################################
 
 # Rebuild frontend for the current repo
