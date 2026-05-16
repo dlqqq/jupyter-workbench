@@ -13,7 +13,7 @@ worktree-add *args:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
-    get_workbench_root "{{ invocation }}" || exit 1
+    get_workbench_root "$PWD" || exit 1
     cd "$WB_ROOT"
 
     # Parse arguments
@@ -99,7 +99,7 @@ worktree-add *args:
 
     # Enable extensions
     if [[ ${#dev_repos[@]} -gt 0 ]]; then
-        just --justfile "$wt/justfile" --working-directory "$wt" enable-all-extensions
+        just "$wt/enable-all-extensions"
     fi
 
     echo ""
@@ -112,7 +112,7 @@ worktree-remove name:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
-    get_workbench_root "{{ invocation }}" || exit 1
+    get_workbench_root "$PWD" || exit 1
     wt="$WB_ROOT/worktrees/{{ name }}"
     if [[ ! -d "$wt" ]]; then
         echo "Error: worktree '{{ name }}' not found" >&2
@@ -132,8 +132,8 @@ add +pkgs:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
-    get_worktree_root "{{ invocation }}" || exit 1
-    cd "$WT_ROOT"
+    get_worktree_root "$PWD" || exit 1
+
     uv add {{ pkgs }}
 
 # Add a package as editable (clone, build, dev-install)
@@ -142,11 +142,11 @@ add-dev repo:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
-    get_worktree_root "{{ invocation }}" || exit 1
-    get_workbench_root "{{ invocation }}" || exit 1
+    get_worktree_root "$PWD" || exit 1
+    get_workbench_root "$PWD" || exit 1
     cd "$WT_ROOT"
 
-    repo="{{repo}}"
+    repo="{{ repo }}"
     url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$WB_ROOT/repos.json")
     if [[ -z "$url" ]]; then
         echo "Error: '$repo' not found in repos.json" >&2
@@ -186,19 +186,18 @@ start *args:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
-    get_worktree_root "{{ invocation }}" || exit 1
-    get_workbench_root "{{ invocation }}" || exit 1
-    cd "$WT_ROOT"
-    uv run jupyter lab --config="$WB_ROOT/jupyter_server_config.py" {{ args }}
+    get_worktree_root "$PWD" || exit 1
+    uv run jupyter lab --config="./jupyter_server_config.py" {{ args }}
 
 # Show which packages are dev-installed in this worktree
 [group('worktree')]
 worktree-status:
     #!/usr/bin/env bash
+    set -eo pipefail
     source "{{ helpers }}"
-    get_worktree_root "{{ invocation }}" || exit 1
+    get_worktree_root "$PWD" || exit 1
     echo "Dev-installed packages:"
-    grep 'editable = true' "$WT_ROOT/pyproject.toml" | cut -d= -f1 | sed 's/^/  /'
+    grep 'editable = true' "pyproject.toml" | cut -d= -f1 | sed 's/^/  /'
 
 # Enable extensions for all dev-installed repos in this worktree
 [group('worktree')]
@@ -206,21 +205,20 @@ enable-all-extensions:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
-    get_worktree_root "{{ invocation }}" || exit 1
+    get_worktree_root "$PWD" || exit 1
     get_worktree_repos
     for repo in "${WT_REPOS[@]}"; do
         echo "=== $repo ==="
-        cd $repo
-        just enable-repo-extensions
+        (cd $repo && just enable-repo-extensions)
     done
 
 ################################################################################
 # Repo recipes (can only be run from inside a repo within a worktree)
 #
-# These use [no-cd] so they run from the directory where `just` was invoked,
-# rather than the default justfile_directory() (i.e. the worktree root). This
-# allows repo recipes to be invoked simply via `cd $repo && just <repo-recipe>`
-# in other higher-level recipes.
+# These use [no-cd] so they can run from the invocation directory, rather than
+# the default justfile_directory() (i.e. the worktree root). This allows repo
+# recipes to be invoked simply via `(cd $repo && just <repo-recipe>)` in other
+# higher-level recipes.
 ################################################################################
 
 # Rebuild frontend for the current repo
