@@ -138,7 +138,7 @@ add +pkgs:
 
 # Add a package as editable (clone, build, dev-install)
 [group('worktree')]
-add-dev +repos:
+add-dev repo:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
@@ -146,41 +146,39 @@ add-dev +repos:
     get_workbench_root "{{ invocation }}" || exit 1
     cd "$WT_ROOT"
 
-    # Validate repo names
-    for repo in {{ repos }}; do
-        url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$WB_ROOT/repos.json")
-        if [[ -z "$url" ]]; then
-            echo "Error: '$repo' not found in repos.json" >&2
-            exit 1
-        fi
-        if [[ -d "$repo" ]]; then
-            echo "Error: '$repo' already exists in this worktree" >&2
-            exit 1
-        fi
-    done
+    repo="{{repo}}"
+    url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$WB_ROOT/repos.json")
+    if [[ -z "$url" ]]; then
+        echo "Error: '$repo' not found in repos.json" >&2
+        exit 1
+    fi
+    if [[ -d "$repo" ]]; then
+        echo "Error: '$repo' already exists in this worktree" >&2
+        exit 1
+    fi
 
-    # Clone repos and add as editable workspace members
-    for repo in {{ repos }}; do
-        url=$(jq -r --arg r "$repo" '.[$r].url' "$WB_ROOT/repos.json")
-        echo "Cloning $repo..."
-        git clone "$url" "$repo"
+    # Clone and add as editable workspace member
+    echo "Cloning $repo..."
+    git clone "$url" "$repo"
 
-        if [[ "$repo" == "jupyter-chat" ]]; then
-            pkg_path="./jupyter-chat/python/jupyterlab-chat"
-        else
-            pkg_path="./$repo"
-        fi
+    pkg_parents=$(jq -r --arg r "$repo" '
+        .[$r].packages // [{"parentDir": "."}]
+        | .[].parentDir
+    ' "$WB_ROOT/repos.json")
 
-        uv add --editable --workspace "$pkg_path"
-    done
+    while IFS= read -r parent_dir; do
+        uv add --editable --workspace "./$repo/$parent_dir"
+    done <<< "$pkg_parents"
 
     # Update .worktree_info
-    for repo in {{ repos }}; do
-        echo "$repo" >> "$WT_ROOT/.worktree_info"
-    done
+    echo "$repo" >> "$WT_ROOT/.worktree_info"
+
+    # Enable extensions
+    cd "$repo"
+    just enable-repo-extensions
 
     echo ""
-    echo "✓ Added: {{ repos }}"
+    echo "✓ Added: $repo"
 
 # Start JupyterLab
 [group('worktree')]
