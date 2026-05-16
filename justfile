@@ -1,6 +1,8 @@
 set dotenv-load
 
 root := justfile_directory()
+helpers := justfile_directory() / "scripts/helpers.sh"
+invocation := invocation_directory()
 
 ################################################################################
 # Workbench recipes (can be run anywhere within the workbench)
@@ -11,8 +13,9 @@ root := justfile_directory()
 worktree-add *args:
     #!/usr/bin/env bash
     set -eo pipefail
-    wb_root=$(just _get_workbench_root)
-    cd "$wb_root"
+    source "{{helpers}}"
+    get_workbench_root "{{invocation}}" || exit 1
+    cd "$WB_ROOT"
 
     # Parse arguments
     name=""
@@ -41,27 +44,28 @@ worktree-add *args:
 
     # Validate dev repo names
     for repo in "${dev_repos[@]}"; do
-        url=$(jq -r --arg r "$repo" '.[$r] // empty' "$wb_root/repos.json")
+        url=$(jq -r --arg r "$repo" '.[$r] // empty' "$WB_ROOT/repos.json")
         if [[ -z "$url" ]]; then
             echo "Error: '$repo' not found in repos.json" >&2
-            echo "Available repos: $(jq -r 'keys[]' "$wb_root/repos.json" | tr '\n' ' ')" >&2
+            echo "Available repos: $(jq -r 'keys[]' "$WB_ROOT/repos.json" | tr '\n' ' ')" >&2
             exit 1
         fi
     done
 
-    wt="$wb_root/worktrees/$name"
+    wt="$WB_ROOT/worktrees/$name"
     if [[ -d "$wt" ]]; then
         echo "Error: worktree '$name' already exists at $wt" >&2
         exit 1
     fi
 
     # Create worktree (detached)
-    mkdir -p "$wb_root/worktrees"
+    mkdir -p "$WB_ROOT/worktrees"
     git worktree add --detach "$wt"
 
-    # Copy latest justfile into worktree
-    cp "$wb_root/justfile" "$wt/justfile"
-    [[ -f "$wb_root/.env" ]] && cp "$wb_root/.env" "$wt/.env"
+    # Copy latest justfile, scripts, and .env into worktree
+    cp "$WB_ROOT/justfile" "$wt/justfile"
+    cp -r "$WB_ROOT/scripts" "$wt/scripts"
+    [[ -f "$WB_ROOT/.env" ]] && cp "$WB_ROOT/.env" "$wt/.env"
 
     # Write marker
     touch "$wt/.is_worktree"
@@ -70,7 +74,7 @@ worktree-add *args:
 
     # Clone and dev-install repos
     for repo in "${dev_repos[@]}"; do
-        url=$(jq -r --arg r "$repo" '.[$r]' "$wb_root/repos.json")
+        url=$(jq -r --arg r "$repo" '.[$r]' "$WB_ROOT/repos.json")
         echo "Cloning $repo..."
         git clone "$url" "$repo"
 
@@ -121,13 +125,14 @@ worktree-add *args:
 worktree-remove name:
     #!/usr/bin/env bash
     set -eo pipefail
-    wb_root=$(just _get_workbench_root)
-    wt="$wb_root/worktrees/{{name}}"
+    source "{{helpers}}"
+    get_workbench_root "{{invocation}}" || exit 1
+    wt="$WB_ROOT/worktrees/{{name}}"
     if [[ ! -d "$wt" ]]; then
         echo "Error: worktree '{{name}}' not found" >&2
         exit 1
     fi
-    cd "$wb_root"
+    cd "$WB_ROOT"
     git worktree remove "$wt" --force
     echo "✓ Removed worktree '{{name}}'"
 
@@ -140,8 +145,9 @@ worktree-remove name:
 add +pkgs:
     #!/usr/bin/env bash
     set -eo pipefail
-    wt_root=$(just _get_worktree_root)
-    cd "$wt_root"
+    source "{{helpers}}"
+    get_worktree_root "{{invocation}}" || exit 1
+    cd "$WT_ROOT"
     uv add {{pkgs}}
 
 # Add a package as editable (clone, build, dev-install)
@@ -149,13 +155,14 @@ add +pkgs:
 add-dev +repos:
     #!/usr/bin/env bash
     set -eo pipefail
-    wt_root=$(just _get_worktree_root)
-    wb_root=$(just _get_workbench_root)
-    cd "$wt_root"
+    source "{{helpers}}"
+    get_worktree_root "{{invocation}}" || exit 1
+    get_workbench_root "{{invocation}}" || exit 1
+    cd "$WT_ROOT"
 
     # Validate repo names
     for repo in {{repos}}; do
-        url=$(jq -r --arg r "$repo" '.[$r] // empty' "$wb_root/repos.json")
+        url=$(jq -r --arg r "$repo" '.[$r] // empty' "$WB_ROOT/repos.json")
         if [[ -z "$url" ]]; then
             echo "Error: '$repo' not found in repos.json" >&2
             exit 1
@@ -168,7 +175,7 @@ add-dev +repos:
 
     # Clone repos and add as editable workspace members
     for repo in {{repos}}; do
-        url=$(jq -r --arg r "$repo" '.[$r]' "$wb_root/repos.json")
+        url=$(jq -r --arg r "$repo" '.[$r]' "$WB_ROOT/repos.json")
         echo "Cloning $repo..."
         git clone "$url" "$repo"
 
@@ -193,14 +200,14 @@ add-dev +repos:
 
         if [[ -f "$pkg_dir/package.json" ]]; then
             echo "Building $repo frontend..."
-            (cd "$pkg_dir" && uv run --project "$wt_root" jlpm && uv run --project "$wt_root" jlpm build)
+            (cd "$pkg_dir" && uv run --project "$WT_ROOT" jlpm && uv run --project "$WT_ROOT" jlpm build)
         fi
 
         echo "Enabling server extension: $pkg_name"
         uv run jupyter server extension enable "$pkg_name" 2>/dev/null || true
 
         if [[ -f "$pkg_dir/package.json" ]]; then
-            (cd "$pkg_dir" && uv run --project "$wt_root" jupyter labextension develop . --overwrite) 2>/dev/null || true
+            (cd "$pkg_dir" && uv run --project "$WT_ROOT" jupyter labextension develop . --overwrite) 2>/dev/null || true
         fi
     done
 
@@ -212,18 +219,20 @@ add-dev +repos:
 start *args:
     #!/usr/bin/env bash
     set -eo pipefail
-    wt_root=$(just _get_worktree_root)
-    wb_root=$(just _get_workbench_root)
-    cd "$wt_root"
-    uv run jupyter lab --config="$wb_root/jupyter_server_config.py" {{args}}
+    source "{{helpers}}"
+    get_worktree_root "{{invocation}}" || exit 1
+    get_workbench_root "{{invocation}}" || exit 1
+    cd "$WT_ROOT"
+    uv run jupyter lab --config="$WB_ROOT/jupyter_server_config.py" {{args}}
 
 # Show which packages are dev-installed in this worktree
 [group('worktree')]
 worktree-status:
     #!/usr/bin/env bash
-    wt_root=$(just _get_worktree_root)
+    source "{{helpers}}"
+    get_worktree_root "{{invocation}}" || exit 1
     echo "Dev-installed packages:"
-    grep 'editable = true' "$wt_root/pyproject.toml" | cut -d= -f1 | sed 's/^/  /'
+    grep 'editable = true' "$WT_ROOT/pyproject.toml" | cut -d= -f1 | sed 's/^/  /'
 
 ################################################################################
 # Repo recipes (can only be run from inside a repo within a worktree)
@@ -234,58 +243,7 @@ worktree-status:
 build:
     #!/usr/bin/env bash
     set -eo pipefail
-    repo_root=$(just _get_worktree_repo)
-    wt_root=$(just _get_worktree_root)
-    cd "$repo_root"
-    uv run --project "$wt_root" jlpm build
-
-################################################################################
-# Internal helpers
-################################################################################
-
-# Print the workbench root path (walks up from cwd)
-_get_workbench_root:
-    #!/usr/bin/env bash
-    dir="$(pwd)"
-    while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/repos.json" && ! -f "$dir/.is_worktree" ]]; then
-            echo "$dir"
-            exit 0
-        fi
-        dir="$(dirname "$dir")"
-    done
-    echo "Error: not inside a jupyter-workbench" >&2
-    exit 1
-
-# Print the worktree root path (walks up from cwd looking for .is_worktree)
-_get_worktree_root:
-    #!/usr/bin/env bash
-    dir="$(pwd)"
-    while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/.is_worktree" ]]; then
-            echo "$dir"
-            exit 0
-        fi
-        dir="$(dirname "$dir")"
-    done
-    echo "Error: not inside a worktree" >&2
-    exit 1
-
-# Print the repo root path (walks up from invocation dir, finds first .git below worktree root)
-_get_worktree_repo:
-    #!/usr/bin/env bash
-    wt_root=$(just _get_worktree_root)
-    dir="{{ invocation_directory() }}"
-    if [[ "$dir" == "$wt_root" ]]; then
-        echo "Error: run this from inside a repo, not the worktree root" >&2
-        exit 1
-    fi
-    while [[ "$dir" != "$wt_root" && "$dir" != "/" ]]; do
-        if [[ -d "$dir/.git" || -f "$dir/.git" ]]; then
-            echo "$dir"
-            exit 0
-        fi
-        dir="$(dirname "$dir")"
-    done
-    echo "Error: not inside a repo within this worktree" >&2
-    exit 1
+    source "{{helpers}}"
+    get_worktree_repo "{{invocation}}" || exit 1
+    cd "$REPO_ROOT"
+    uv run --project "$WT_ROOT" jlpm build
