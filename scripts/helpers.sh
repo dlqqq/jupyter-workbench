@@ -21,7 +21,7 @@ get_workbench_root() {
 get_worktree_root() {
     local dir="$1"
     while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/.worktree_info" ]]; then
+        if [[ -f "$dir/.worktree_info.json" ]]; then
             WT_ROOT="$dir"
             return 0
         fi
@@ -55,9 +55,11 @@ get_worktree_repo() {
 # Requires: WT_ROOT to be set
 get_worktree_repos() {
     WT_REPOS=()
+    local raw
+    raw=$(jq -r '.["dev-repos"][]' "$WT_ROOT/.worktree_info.json")
     while IFS= read -r line; do
         [[ -n "$line" ]] && WT_REPOS+=("$line")
-    done < "$WT_ROOT/.worktree_info"
+    done <<< "$raw"
 }
 
 # Sets: PKG_NAMES (array of Python package names for this repo)
@@ -93,6 +95,15 @@ get_repo_pkg_parents() {
 # Errors if a Jupyter server is already running in this worktree
 # Requires: WT_ROOT to be set
 check_no_server_running() {
+    # Check .worktree_info.json first
+    local saved_url
+    saved_url=$(jq -r '.server.url // empty' "$WT_ROOT/.worktree_info.json" 2>/dev/null)
+    if [[ -n "$saved_url" ]]; then
+        echo "Error: a Jupyter server is already running at $saved_url" >&2
+        echo "Use 'just server-restart' to restart it." >&2
+        return 1
+    fi
+    # Also check jupyter server list as fallback
     local running
     running=$(uv run jupyter server list --jsonlist 2>/dev/null | jq -r --arg root "$WT_ROOT" '.[] | select(.root_dir == $root) | .url' | head -1)
     if [[ -n "$running" ]]; then
@@ -100,4 +111,36 @@ check_no_server_running() {
         echo "Stop it before starting a new one." >&2
         return 1
     fi
+}
+
+# Write server info to .worktree_info.json
+# Requires: WT_ROOT to be set
+set_server_info() {
+    local surface_id="$1"
+    local url="$2"
+    local token="$3"
+    local pid="$4"
+    local pgid="$5"
+    jq --arg sid "$surface_id" --arg url "$url" --arg token "$token" --arg pid "$pid" --arg pgid "$pgid" \
+        '.server = {"surface_id": $sid, "url": $url, "token": $token, "pid": ($pid | tonumber), "pgid": ($pgid | tonumber)}' \
+        "$WT_ROOT/.worktree_info.json" > "$WT_ROOT/.worktree_info.json.tmp" \
+        && mv "$WT_ROOT/.worktree_info.json.tmp" "$WT_ROOT/.worktree_info.json"
+}
+
+# Write browser info to .worktree_info.json
+# Requires: WT_ROOT to be set
+set_browser_info() {
+    local surface_id="$1"
+    jq --arg sid "$surface_id" \
+        '.browser = {"surface_id": $sid}' \
+        "$WT_ROOT/.worktree_info.json" > "$WT_ROOT/.worktree_info.json.tmp" \
+        && mv "$WT_ROOT/.worktree_info.json.tmp" "$WT_ROOT/.worktree_info.json"
+}
+
+# Clear server and browser info from .worktree_info.json
+# Requires: WT_ROOT to be set
+clear_server_info() {
+    jq '.server = null | .browser = null' \
+        "$WT_ROOT/.worktree_info.json" > "$WT_ROOT/.worktree_info.json.tmp" \
+        && mv "$WT_ROOT/.worktree_info.json.tmp" "$WT_ROOT/.worktree_info.json"
 }

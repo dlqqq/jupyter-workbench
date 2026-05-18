@@ -10,7 +10,7 @@ just worktree-add my-feature --dev jupyter-ai-acp-client jupyter-ai-persona-mana
 
 # Start JupyterLab from the worktree
 cd worktrees/my-feature
-just start
+just server-start
 
 # Add another package later
 just add-dev jupyter-ai-router
@@ -54,8 +54,9 @@ Worktree recipes can be run from anywhere within a specific worktree
 | `add-dev <repo>` | Clone + editable install a package |
 | `add <pkgs...>` | Add PyPI packages (wrapper around `uv add`) |
 | `sync` | Sync the venv (`uv sync`) |
-| `start` | Launch JupyterLab |
-| `start-cmux` | Start JupyterLab in a new tab + open browser to the right (cmux only) |
+| `server-start` | Start JupyterLab in a new tab + open browser |
+| `server-stop` | Stop the JupyterLab server |
+| `server-restart` | Restart the JupyterLab server |
 | `worktree-status` | List dev-installed packages |
 | `enable-all-extensions` | Enable extensions for all dev repos |
 
@@ -93,9 +94,9 @@ When `packages` is absent, defaults are:
 - `name` = repo name with `-` replaced by `_`
 - `parentDir` = `.`
 
-### `.worktree_info`
+### `.worktree_info.json`
 
-Each worktree contains a `.worktree_info` file listing dev-installed repos (one
+Each worktree contains a `.worktree_info.json` file listing dev-installed repos (one
 per line). This is managed automatically by `worktree-add` and `add-dev`.
 
 ## Architecture
@@ -110,7 +111,7 @@ jupyter-workbench/              ← workbench root
 ├── jupyter_server_config.py
 └── worktrees/
     └── my-feature/             ← a worktree
-        ├── .worktree_info      ← lists dev repos
+        ├── .worktree_info.json.json      ← lists dev repos
         ├── .venv/
         ├── pyproject.toml      ← patched by uv
         ├── jupyter-ai-router/  ← cloned repo (editable)

@@ -63,14 +63,19 @@ worktree-add *args:
 
     # Copy latest justfile, scripts, and .env into worktree
     cp "$WB_ROOT/justfile" "$wt/justfile"
+    rm -rf "$wt/scripts"
     cp -r "$WB_ROOT/scripts" "$wt/scripts"
     [[ -f "$WB_ROOT/.env" ]] && cp "$WB_ROOT/.env" "$wt/.env"
 
-    # Write worktree info with repo list
-    touch "$wt/.worktree_info"
-    for repo in "${dev_repos[@]}"; do
-        echo "$repo" >> "$wt/.worktree_info"
-    done
+    # Write worktree info
+    if [[ ${#dev_repos[@]} -gt 0 ]]; then
+        repos_json=$(printf '%s\n' "${dev_repos[@]}" | jq -R . | jq -s .)
+    else
+        repos_json="[]"
+    fi
+    jq -n --argjson repos "$repos_json" \
+        '{"dev-repos": $repos, "workspace_id": "", "server": null, "browser": null}' \
+        > "$wt/.worktree_info.json"
 
     cd "$wt"
 
@@ -107,7 +112,7 @@ worktree-add *args:
 
     echo ""
     echo "✓ Worktree '$name' ready at: $wt"
-    echo "  cd $wt && just start"
+    echo "  cd $wt && just server-start"
 
 # Remove a worktree
 [group('workbench')]
@@ -209,8 +214,9 @@ add-dev repo:
         uv add --editable --workspace "./$repo/$parent_dir"
     done <<< "$pkg_parents"
 
-    # Update .worktree_info
-    echo "$repo" >> "$WT_ROOT/.worktree_info"
+    # Update .worktree_info.json
+    jq --arg repo "$repo" '.["dev-repos"] += [$repo]' "$WT_ROOT/.worktree_info.json" > "$WT_ROOT/.worktree_info.json.tmp" \
+        && mv "$WT_ROOT/.worktree_info.json.tmp" "$WT_ROOT/.worktree_info.json"
 
     # Enable extensions
     cd "$repo"
@@ -228,19 +234,9 @@ sync *args:
     get_worktree_root "$PWD" || exit 1
     uv sync
 
-# Start JupyterLab
+# Start JupyterLab in a new tab and open browser to the right
 [group('worktree')]
-start *args:
-    #!/usr/bin/env bash
-    set -eo pipefail
-    source "{{ helpers }}"
-    get_worktree_root "$PWD" || exit 1
-    check_no_server_running || exit 1
-    uv run jupyter lab --config="./jupyter_server_config.py" {{ args }}
-
-# Start JupyterLab in a new tab and open browser to the right (cmux only)
-[group('worktree')]
-start-cmux:
+server-start *args:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
@@ -252,17 +248,18 @@ start-cmux:
 
     # Start server in a new terminal tab (same pane, no browser)
     surface_json=$(cmux new-surface --workspace "${CMUX_WORKSPACE_ID}" --pane "$pane" --type terminal --focus false --json)
-    surface=$(echo "$surface_json" | jq -r '.surface_ref')
+    server_surface=$(echo "$surface_json" | jq -r '.surface_ref')
 
-    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$surface" "cd $WT_ROOT && just start --no-browser\n"
+    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$server_surface" "cd $WT_ROOT && uv run jupyter lab --no-browser --expose-app-in-browser --config=./jupyter_server_config.py {{ args }}\n"
 
-    # Wait for server to start, then get the URL with token
+    # Wait for server to start
     echo "Waiting for server to start..."
     for i in {1..30}; do
         sleep 1
-        url=$(uv run jupyter server list --jsonlist 2>/dev/null | jq -r '.[0].url // empty')
-        token=$(uv run jupyter server list --jsonlist 2>/dev/null | jq -r '.[0].token // empty')
-        if [[ -n "$url" && -n "$token" ]]; then
+        server_json=$(uv run jupyter server list --jsonlist 2>/dev/null | jq --arg root "$WT_ROOT" '[.[] | select(.root_dir == $root)] | .[0] // empty')
+        if [[ -n "$server_json" && "$server_json" != "null" ]]; then
+            url=$(echo "$server_json" | jq -r '.url')
+            token=$(echo "$server_json" | jq -r '.token')
             break
         fi
     done
@@ -272,9 +269,62 @@ start-cmux:
         exit 1
     fi
 
+    # Save server info (including PID and PGID)
+    pid=$(echo "$server_json" | jq -r '.pid')
+    pgid=$(ps -o pgid= -p "$pid" | tr -d ' ')
+    set_server_info "$server_surface" "$url" "$token" "$pid" "$pgid"
+
     # Open browser with token
-    cmux browser open "${url}lab?token=${token}" --workspace "${CMUX_WORKSPACE_ID}"
+    browser_json=$(cmux --json browser open "${url}lab?token=${token}" --workspace "${CMUX_WORKSPACE_ID}")
+    browser_surface=$(echo "$browser_json" | jq -r '.surface_ref')
+    set_browser_info "$browser_surface"
+
     echo "✓ JupyterLab running at ${url}lab?token=${token}"
+    echo "  Server surface: $server_surface"
+    echo "  Browser surface: $browser_surface"
+    echo "  PGID: $pgid"
+
+# Stop the JupyterLab server
+[group('worktree')]
+server-stop:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_worktree_root "$PWD" || exit 1
+
+    # Read server info
+    server_pgid=$(jq -r '.server.pgid // empty' "$WT_ROOT/.worktree_info.json")
+
+    if [[ -z "$server_pgid" ]]; then
+        echo "Error: no server is running in this workspace." >&2
+        exit 1
+    fi
+
+    # Kill the process group gracefully
+    echo "Stopping server (PGID $server_pgid): kill -TERM -- -$server_pgid"
+    kill -TERM -- -"$server_pgid" 2>/dev/null || true
+
+    # Poll every 250ms for up to 3s
+    for i in {1..12}; do
+        if ! kill -0 -- -"$server_pgid" 2>/dev/null; then
+            clear_server_info
+            echo "✓ Server stopped"
+            exit 0
+        fi
+        sleep 0.25
+    done
+
+    # Force kill
+    echo "Server didn't stop gracefully within 3s, force killing..."
+    kill -9 -- -"$server_pgid" 2>/dev/null || true
+    clear_server_info
+    echo "✓ Server force killed"
+
+# Restart the JupyterLab server
+[group('worktree')]
+server-restart:
+    just server-stop
+    just server-start
 
 # Print the browser surface ref in the current workspace
 [group('worktree')]

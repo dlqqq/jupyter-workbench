@@ -9,7 +9,7 @@ Automate Jupyter Chat interactions through a cmux browser surface running Jupyte
 
 ## Prerequisites
 
-- A JupyterLab server running in the worktree (`just start` or `just start-cmux`)
+- A JupyterLab server running in the worktree (`just server-start` or `just server-start`)
 - A cmux browser surface open to JupyterLab
 - The `jupyter-chat` extension enabled
 

@@ -9,7 +9,7 @@ Recipes are organized into three groups based on where they can be run:
 | Group | Runs from | `$PWD` is | Example |
 |-------|-----------|-----------|---------|
 | **workbench** | Workbench root | Workbench root | `worktree-add`, `worktree-remove`, `sync-workbench` |
-| **worktree** | Worktree root | Worktree root | `add-dev`, `start`, `start-cmux`, `enable-all-extensions` |
+| **worktree** | Worktree root | Worktree root | `add-dev`, `server-start`, `server-stop`, `server-restart`, `enable-all-extensions` |
 | **repo** | Inside a repo | Repo dir (via `[no-cd]`) | `build`, `enable-repo-extensions` |
 
 ## Working Directory Conventions
@@ -85,13 +85,27 @@ For a repo where the Python package is nested or has a different name:
 - `name`: Python package name (used for `jupyter server extension enable <name>`)
 - `parentDir`: Path from repo root to the directory containing `pyproject.toml`
 
-## `.worktree_info`
+## `.worktree_info.json`
 
-A plain text file at the worktree root listing dev-installed repos, one per line. Managed by:
-- `worktree-add`: writes initial list at creation
-- `add-dev`: appends new repos
+JSON file at the worktree root tracking dev-installed repos and runtime state.
 
-Used by `get_worktree_repos` to iterate dev repos without scanning the filesystem or parsing pyproject.toml.
+```json
+{
+  "dev-repos": ["jupyter-ai-router", "jupyter-chat"],
+  "workspace_id": "",
+  "server": {
+    "surface_id": "surface:19",
+    "url": "http://localhost:8888/",
+    "token": "abc123..."
+  },
+  "browser": {
+    "surface_id": "surface:22"
+  }
+}
+```
+
+- `dev-repos`: managed by `worktree-add` and `add-dev`
+- `server`/`browser`: managed by `just server-start` and `just server-restart` (null when server is not running)
 
 ## Files copied to worktrees
 

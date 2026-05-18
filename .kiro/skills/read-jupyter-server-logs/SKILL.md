@@ -9,15 +9,15 @@ Read logs from a running Jupyter Server by capturing the terminal output of the 
 
 ## Prerequisites
 
-- A Jupyter Server running in a cmux terminal surface (started via `just start` or `just start-cmux`)
+- A Jupyter Server running in a cmux terminal surface (started via `just server-start` or `just server-start`)
 
 ## Finding the Server Surface
 
-The server runs in a terminal surface. Find it by listing surfaces and looking for the one running `just start`:
+The server runs in a terminal surface. Find it by listing surfaces and looking for the one running `just server-start`:
 
 ```bash
 cmux list-pane-surfaces --workspace <workspace-ref> --json
-# Look for a surface with title containing "just start"
+# Look for a surface with title containing "just server-start"
 ```
 
 Or if you know the workspace:
