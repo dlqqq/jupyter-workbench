@@ -139,9 +139,9 @@ worktree-remove-all:
     rm -rf worktrees
     echo "✓ All worktrees removed"
 
-# Sync justfile and scripts to all worktrees
+# Sync justfile, scripts, and skills to all worktrees
 [group('workbench')]
-sync-recipes:
+sync-worktrees:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
@@ -152,6 +152,9 @@ sync-recipes:
         cp "$WB_ROOT/justfile" "$wt/justfile"
         rm -rf "$wt/scripts"
         cp -r "$WB_ROOT/scripts" "$wt/scripts"
+        rm -rf "$wt/.kiro/skills"
+        mkdir -p "$wt/.kiro"
+        cp -r "$WB_ROOT/.kiro/skills" "$wt/.kiro/skills"
         echo "✓ $name"
     done
 
