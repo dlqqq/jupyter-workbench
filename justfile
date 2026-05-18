@@ -261,6 +261,21 @@ start-cmux:
     cmux browser open "${url}lab?token=${token}" --workspace "${CMUX_WORKSPACE_ID}"
     echo "✓ JupyterLab running at ${url}lab?token=${token}"
 
+# Print the browser surface ref in the current workspace
+[group('worktree')]
+get-browser-surface:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    for pane in $(cmux list-panes --workspace "${CMUX_WORKSPACE_ID}" --json | jq -r '.panes[].ref'); do
+        ref=$(cmux list-pane-surfaces --workspace "${CMUX_WORKSPACE_ID}" --pane "$pane" --json | jq -r '.surfaces[] | select(.type == "browser") | .ref')
+        if [[ -n "$ref" ]]; then
+            echo "$ref"
+            exit 0
+        fi
+    done
+    echo "Error: no browser surface found in this workspace" >&2
+    exit 1
+
 # Show which packages are dev-installed in this worktree
 [group('worktree')]
 worktree-status:
@@ -284,6 +299,19 @@ enable-all-extensions:
         (cd $repo && just enable-repo-extensions)
     done
 
+# Build all dev-installed repos in this worktree
+[group('worktree')]
+build-all:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_worktree_root "$PWD" || exit 1
+    get_worktree_repos
+    for repo in "${WT_REPOS[@]}"; do
+        echo "=== $repo ==="
+        (cd $repo && just build)
+    done
+
 ################################################################################
 # Repo recipes (can only be run from inside a repo within a worktree)
 #
@@ -293,6 +321,48 @@ enable-all-extensions:
 # higher-level recipes.
 ################################################################################
 
+# Run `jlpm` (JupyterLab's bundled version of `yarn`), forwarding given arguments
+[group('repo')]
+[no-cd]
+jlpm *args:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_worktree_repo "{{ invocation }}" || exit 1
+    uv run --project "$WT_ROOT" jlpm {{ args }}
+
+# Run `pytest` on a repo, forwarding given arguments
+[group('repo')]
+[no-cd]
+pytest *args:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_worktree_repo "{{ invocation }}" || exit 1
+    uv run --project "$WT_ROOT" pytest {{ args }}
+
+# Run `mypy` on a repo, forwarding given arguments
+[group('repo')]
+[no-cd]
+mypy *args:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_worktree_repo "{{ invocation }}" || exit 1
+    uv run --project "$WT_ROOT" mypy {{ args }}
+
+# Run frontend linters
+[group('repo')]
+[no-cd]
+lint:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_worktree_repo "{{ invocation }}" || exit 1
+    # run twice because linters occasionally require 2 runs
+    uv run --project "$WT_ROOT" jlpm lint
+    uv run --project "$WT_ROOT" jlpm lint
+
 # Rebuild frontend for the current repo
 [group('repo')]
 [no-cd]
@@ -301,7 +371,6 @@ build:
     set -eo pipefail
     source "{{ helpers }}"
     get_worktree_repo "{{ invocation }}" || exit 1
-    cd "$REPO_ROOT"
     uv run --project "$WT_ROOT" jlpm build
 
 # Enable all extensions for this repo

@@ -1,6 +1,6 @@
 # Contributing
 
-> **For AI agents:** This document explains how the workbench works internally and how to add or modify recipes. Read this before making changes to the justfile, helpers, or repos.json.
+How the workbench works internally. Read this before modifying the justfile, helpers, or workbench infrastructure.
 
 ## Recipe Hierarchy
 
@@ -59,9 +59,13 @@ All path-walking functions accept a starting directory argument and walk up unti
 
 Maps repo names to git URLs and optional package metadata. See `repos.schema.json` for the full schema.
 
+Default conventions when `packages` is absent:
+- `name` = repo key with `-` replaced by `_`
+- `parentDir` = `.`
+
 ### Adding a new repo
 
-For a standard single-package repo (package name = repo name with `-` → `_`, pyproject.toml at root):
+For a standard single-package repo (package name = repo key with `-` → `_`, pyproject.toml at root):
 
 ```json
 "my-new-repo": { "url": "git@github.com:org/my-new-repo.git" }
@@ -78,7 +82,7 @@ For a repo where the Python package is nested or has a different name:
 }
 ```
 
-- `name`: The Python package name (used for `jupyter server extension enable <name>`)
+- `name`: Python package name (used for `jupyter server extension enable <name>`)
 - `parentDir`: Path from repo root to the directory containing `pyproject.toml`
 
 ## `.worktree_info`
@@ -96,7 +100,7 @@ Used by `get_worktree_repos` to iterate dev repos without scanning the filesyste
 - `scripts/` (helpers)
 - `.env` (if present)
 
-If you update the justfile or helpers, existing worktrees will have stale copies. This is intentional — worktrees are disposable. Create a new one to pick up changes, or manually copy the files.
+If you update the justfile or helpers, existing worktrees will have stale copies. Run `just sync-recipes` to update them, or create a new worktree.
 
 ## Adding a new recipe
 

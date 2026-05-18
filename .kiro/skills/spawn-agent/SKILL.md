@@ -73,8 +73,8 @@ Write `PLAN.md` to the worktree root with:
 - Issue body (or summary for long issues)
 - Which packages are dev-installed and why
 - Implementation guidance (level of detail depends on complexity)
-- Constraints: "run `just build` from the repo to rebuild frontend", "run `just enable-repo-extensions` after changes to server extensions"
-- **Final step:** "When done, send a notification: `cmux notify --title 'Done: <worktree-name>' --body '<brief summary of what was done>'`"
+
+Do NOT repeat general workflow info (build/restart/test/notify commands) — the worker agent will read that from AGENTS.md automatically.
 
 ### Step 7: Create cmux workspace and launch agent
 
@@ -85,8 +85,10 @@ cmux new-workspace --name "<worktree-name>"
 # Get the workspace ref and surface ref
 cmux list-pane-surfaces --workspace <workspace-ref> --json
 
-# Send the command to start kiro (must specify both --workspace and --surface)
-cmux send --workspace <workspace-ref> --surface <surface-ref> "cd <worktree-path> && kiro-cli chat --agent dlq -a 'Read PLAN.md and follow the plan step by step. Ask me if anything is unclear.'\n"
+# Build the prompt and send
+PROMPT="You are a worker agent assigned to the <worktree-name> worktree under the Jupyter Workbench. First, read AGENTS.md if it is not already in your context. It describes the available recipes, skills, and general workflow for working in a worktree. Then read PLAN.md for your specific task. Follow the worker agent workflow described in AGENTS.md. Notify the user once you are complete or get stuck."
+
+cmux send --workspace <workspace-ref> --surface <surface-ref> "cd <worktree-path> && kiro-cli chat --agent dlq -a '$PROMPT'\n"
 ```
 
 ## Notes
