@@ -94,7 +94,7 @@ get_repo_pkg_parents() {
 # Requires: WT_ROOT to be set
 check_no_server_running() {
     local running
-    running=$(uv run jupyter server list --jsonlist 2>/dev/null | jq -r '.[0].url // empty')
+    running=$(uv run jupyter server list --jsonlist 2>/dev/null | jq -r --arg root "$WT_ROOT" '.[] | select(.root_dir == $root) | .url' | head -1)
     if [[ -n "$running" ]]; then
         echo "Error: a Jupyter server is already running at $running" >&2
         echo "Stop it before starting a new one." >&2
