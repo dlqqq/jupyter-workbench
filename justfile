@@ -418,3 +418,20 @@ enable-repo-lab-extensions:
         echo "Enabling lab extension in: $REPO_NAME/$parent_dir"
         (cd "$parent_dir" && uv run --project "$WT_ROOT" jupyter labextension develop . --overwrite) || true
     done
+
+# Ensure a fork exists and is set as a remote
+[group('repo')]
+[no-cd]
+ensure-fork:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_worktree_repo "{{ invocation }}" || exit 1
+    cd "$REPO_ROOT"
+    if ! git remote get-url fork &>/dev/null; then
+        echo "Forking..."
+        gh repo fork --remote --remote-name fork
+        gh repo set-default "$(git remote get-url origin | sed 's|.*github.com[:/]||;s|\.git$||')"
+    else
+        echo "Fork remote already exists"
+    fi

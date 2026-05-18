@@ -100,6 +100,7 @@ Run `just --list --unsorted` to see all available recipes grouped.
 | Need to read server logs | `.kiro/skills/read-jupyter-server-logs/SKILL.md` |
 | Need to interact with Jupyter Chat in the browser | `.kiro/skills/jupyter-chat-browser-use/SKILL.md` |
 | Need to run JupyterLab commands programmatically | `.kiro/skills/run-jupyterlab-command/SKILL.md` |
+| Need to open a pull request | `.kiro/skills/open-pr/SKILL.md` |
 | Need to spawn a new agent session for an issue | `.kiro/skills/spawn-agent/SKILL.md` (workbench root only) |
 | Need to add a repo not listed in `repos.json` | `CONTRIBUTING.md` |
 | Need to add or modify a justfile recipe | `CONTRIBUTING.md` |
