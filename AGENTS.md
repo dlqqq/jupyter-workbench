@@ -25,6 +25,7 @@ You are assigned to a task. Stay in your worktree. If you need another package, 
 2. **Work on the fix.** After making changes:
    - Frontend changes (`.ts`, `.tsx`, `.css`): use the `rebuild-frontend` skill
    - Backend changes (`.py`): use the `restart-jupyter-server` skill
+   - **Keep screenshots** in `screenshots/` — do NOT delete them. They serve as evidence of testing and may be used in the PR description later.
 
 3. **Add test coverage.** Ensure at least unit/integration level tests cover your change. Skipping E2E tests is fine if the repo doesn't already have E2E test infrastructure to build off of.
 
