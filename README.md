@@ -33,21 +33,19 @@ just build
 
 ## Recipes
 
-### Workbench recipes
+Recipes are split across 3 justfiles using `set fallback` so lower levels can call parent recipes.
 
-Workbench recipes can be run from anywhere within the workbench.
+### Workbench recipes (`justfile`)
 
 | Recipe | Description |
 |--------|-------------|
 | `worktree-add <name> [--dev <repos...>] [--with <packages...>]` | Create a new worktree |
 | `worktree-remove <name>` | Remove a worktree |
 | `worktree-remove-all` | Remove all worktrees |
-| `sync-workbench` | Sync justfile, scripts, and skills to all worktrees |
+| `sync-workbench` | Sync justfiles and skills to all worktrees |
+| `get-workbench-root` | Echo the workbench root path |
 
-### Worktree recipes
-
-Worktree recipes can be run from anywhere within a specific worktree
-(`worktrees/<worktree-name>`).
+### Worktree recipes (`worktree.just` → `justfile`)
 
 | Recipe | Description |
 |--------|-------------|
@@ -57,20 +55,22 @@ Worktree recipes can be run from anywhere within a specific worktree
 | `server-start` | Start JupyterLab in a new tab + open browser |
 | `server-stop` | Stop the JupyterLab server |
 | `server-restart` | Restart the JupyterLab server |
-| `worktree-status` | List dev-installed packages |
+| `server-status` | Check if a server is running |
+| `worktree-status` | List dev-installed repos |
 | `enable-all-extensions` | Enable extensions for all dev repos |
+| `build-all` | Build all dev repos |
+| `get-worktree-root` | Echo the worktree root path |
 
-### Repo recipes — run from inside a repo (`[no-cd]`)
-
-Repository recipes can be run from anywhere within a repository checked out
-inside of a worktree (e.g. `worktrees/jupyter-ai-issue-123/jupyter-ai-router`).
+### Repo recipes (`repo.just` → `justfile`)
 
 | Recipe | Description |
 |--------|-------------|
 | `build` | Rebuild frontend for the current repo |
+| `lint` | Run frontend linters |
+| `pytest` | Run pytest |
+| `mypy` | Run mypy |
 | `enable-repo-extensions` | Enable server + lab extensions |
-| `enable-repo-server-extensions` | Enable server extension only |
-| `enable-repo-lab-extensions` | Enable lab extension only |
+| `ensure-fork` | Create a GitHub fork and add as remote |
 
 ## Configuration
 
@@ -90,34 +90,28 @@ Maps repo names to git URLs and optional package metadata:
 }
 ```
 
-When `packages` is absent, defaults are:
-- `name` = repo name with `-` replaced by `_`
-- `parentDir` = `.`
-
 ### `.worktree_info.json`
 
-Each worktree contains a `.worktree_info.json` file listing dev-installed repos (one
-per line). This is managed automatically by `worktree-add` and `add-dev`.
+Each worktree contains a `.worktree_info.json` tracking dev repos and server state. Managed automatically by recipes.
 
 ## Architecture
 
 ```
 jupyter-workbench/              ← workbench root
-├── justfile
-├── scripts/helpers.sh          ← shared bash functions
+├── justfile                    ← workbench recipes
+├── worktree.just               ← copied as justfile to worktrees
+├── repo.just                   ← copied as justfile to repos
 ├── repos.json                  ← repo registry
-├── repos.schema.json           ← JSON schema for repos.json
 ├── pyproject.toml              ← base deps (jupyterlab)
 ├── jupyter_server_config.py
 └── worktrees/
     └── my-feature/             ← a worktree
-        ├── .worktree_info.json.json      ← lists dev repos
+        ├── justfile            ← worktree.just copy
+        ├── .worktree_info.json
         ├── .venv/
-        ├── pyproject.toml      ← patched by uv
-        ├── jupyter-ai-router/  ← cloned repo (editable)
-        └── jupyter-chat/       ← cloned repo (editable)
+        ├── pyproject.toml
+        ├── jupyter-ai-router/  ← cloned repo
+        │   └── justfile        ← repo.just copy
+        └── jupyter-chat/
+            └── justfile        ← repo.just copy
 ```
-
-## TODO
-
-- [ ] Make spawned agent CLI configurable (support Codex, Claude Code, etc. in addition to Kiro)

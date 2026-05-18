@@ -1,59 +1,46 @@
 # Contributing
 
-How the workbench works internally. Read this before modifying the justfile, helpers, or workbench infrastructure.
+How the workbench works internally. Read this before modifying justfiles or workbench infrastructure.
 
-## Recipe Hierarchy
+## Justfile Architecture
 
-Recipes are organized into three groups based on where they can be run:
+Recipes are split across 3 justfiles, each scoped to its directory level:
 
-| Group | Runs from | `$PWD` is | Example |
-|-------|-----------|-----------|---------|
-| **workbench** | Workbench root | Workbench root | `worktree-add`, `worktree-remove`, `sync-workbench` |
-| **worktree** | Worktree root | Worktree root | `add-dev`, `server-start`, `server-stop`, `server-restart`, `enable-all-extensions` |
-| **repo** | Inside a repo | Repo dir (via `[no-cd]`) | `build`, `enable-repo-extensions` |
+| File | Location | Groups |
+|------|----------|--------|
+| `justfile` | Workbench root | `[workbench]` |
+| `worktree.just` → copied as `justfile` | Worktree root | `[worktree]`, `[worktree-server]` |
+| `repo.just` → copied as `justfile` | Repo root | `[repo]` |
 
-## Working Directory Conventions
+### Fallback
 
-- **Workbench and worktree recipes** do NOT use `[no-cd]`. `$PWD` = `justfile_directory()` = the directory containing the justfile (workbench root or worktree root).
-- **Repo recipes** use `[no-cd]`. `$PWD` = where the user (or parent script) invoked `just`. This allows them to be called from inside a repo directory.
+Lower-level justfiles use `set fallback` so recipes can call parent-level recipes:
+
+```
+repo justfile → worktree justfile → workbench justfile
+```
+
+For example, a repo recipe can call `just get-worktree-root` — `just` walks up until it finds the worktree's justfile which defines that recipe.
+
+### Path resolution
+
+Each justfile uses `{{ justfile_directory() }}` as its own root. To get a parent root:
+
+```bash
+# From a repo recipe, get the worktree root:
+wt_root=$(just get-worktree-root)
+
+# From a worktree recipe, get the workbench root:
+wb_root=$(just get-workbench-root)
+```
 
 ### Calling repo recipes from worktree recipes
 
-Use a subshell to `cd` into the repo before invoking `just`:
+Use a subshell to `cd` into the repo:
 
 ```bash
-(cd "$WT_ROOT/$repo" && just enable-repo-extensions)
+(cd "$wt_root/$repo" && just build)
 ```
-
-The subshell ensures:
-1. `just` is invoked from the repo dir
-2. With `[no-cd]`, the recipe's `$PWD` = repo dir
-3. The parent loop's working directory is unaffected
-
-Do NOT use `--working-directory` — it is ignored by `[no-cd]` recipes.
-
-## `scripts/helpers.sh`
-
-All recipes source this file for path resolution. Functions set global variables rather than printing to stdout (no subshell overhead).
-
-```bash
-source "{{ helpers }}"
-get_worktree_root "$PWD" || exit 1
-# Now $WT_ROOT is set
-```
-
-### Available functions
-
-| Function | Sets | Requires |
-|----------|------|----------|
-| `get_workbench_root <dir>` | `WB_ROOT` | — |
-| `get_worktree_root <dir>` | `WT_ROOT` | — |
-| `get_worktree_repo <dir>` | `REPO_ROOT`, `REPO_NAME`, also sets `WT_ROOT` | — |
-| `get_worktree_repos` | `WT_REPOS` (array) | `WT_ROOT` |
-| `get_repo_pkg_names` | `PKG_NAMES` (array) | `WB_ROOT`, `REPO_NAME` |
-| `get_repo_pkg_parents` | `PKG_PARENT_DIRS` (array) | `WB_ROOT`, `REPO_NAME` |
-
-All path-walking functions accept a starting directory argument and walk up until they find the relevant marker.
 
 ## `repos.json`
 
@@ -65,13 +52,13 @@ Default conventions when `packages` is absent:
 
 ### Adding a new repo
 
-For a standard single-package repo (package name = repo key with `-` → `_`, pyproject.toml at root):
+For a standard single-package repo:
 
 ```json
 "my-new-repo": { "url": "git@github.com:org/my-new-repo.git" }
 ```
 
-For a repo where the Python package is nested or has a different name:
+For a repo with nested or differently-named packages:
 
 ```json
 "my-repo": {
@@ -81,9 +68,6 @@ For a repo where the Python package is nested or has a different name:
   ]
 }
 ```
-
-- `name`: Python package name (used for `jupyter server extension enable <name>`)
-- `parentDir`: Path from repo root to the directory containing `pyproject.toml`
 
 ## `.worktree_info.json`
 
@@ -96,7 +80,9 @@ JSON file at the worktree root tracking dev-installed repos and runtime state.
   "server": {
     "surface_id": "surface:19",
     "url": "http://localhost:8888/",
-    "token": "abc123..."
+    "token": "abc123...",
+    "pid": 12345,
+    "pgid": 12340
   },
   "browser": {
     "surface_id": "surface:22"
@@ -105,21 +91,22 @@ JSON file at the worktree root tracking dev-installed repos and runtime state.
 ```
 
 - `dev-repos`: managed by `worktree-add` and `add-dev`
-- `server`/`browser`: managed by `just server-start` and `just server-restart` (null when server is not running)
+- `server`/`browser`: managed by `just server-start` and `just server-stop` (null when server is not running)
 
 ## Files copied to worktrees
 
 `worktree-add` copies these from the workbench root into each new worktree:
-- `justfile`
-- `scripts/` (helpers)
+- `worktree.just` → `justfile`
+- `.kiro/skills/`
 - `.env` (if present)
+- `repo.just` → `<repo>/justfile` (for each dev repo, also adds to `.git/info/exclude`)
 
-If you update the justfile, helpers, or skills, existing worktrees will have stale copies. Run `just sync-workbench` to update them, or create a new worktree.
+Run `just sync-workbench` to update existing worktrees after modifying these files.
 
 ## Adding a new recipe
 
-1. Decide which group it belongs to (workbench, worktree, or repo)
-2. Add the `[group('...')]` attribute
-3. For repo recipes, add `[no-cd]`
-4. Source helpers and call the appropriate `get_*` function with `$PWD`
-5. Use `$WB_ROOT`, `$WT_ROOT`, `$REPO_ROOT` etc. for paths — never hardcode
+1. Decide which justfile it belongs to (`justfile`, `worktree.just`, or `repo.just`)
+2. Add the appropriate `[group('...')]` attribute
+3. Use `{{ justfile_directory() }}` for paths within the same level
+4. Call `just get-worktree-root` or `just get-workbench-root` for parent paths
+5. Use inline `jq` for reading/writing `.worktree_info.json`

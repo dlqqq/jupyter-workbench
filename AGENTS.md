@@ -44,13 +44,7 @@ You are assigned to a task. Stay in your worktree. If you need another package, 
 
 When the user asks you to sign off or clean up:
 
-1. **Stop the server** — suspend with `ctrl+z`, then kill the process group:
-   ```bash
-   cmux send-key --surface $SERVER_SURFACE ctrl+z
-   sleep 1
-   cmux send --surface $SERVER_SURFACE "pid=\$(jobs -l %1 | awk '{print \$3}'); kill -TERM -- -\$pid\n"
-   sleep 2
-   ```
+1. **Stop the server** — run `just server-stop` from the worktree root.
 
 2. **Close extra surfaces** — close any surfaces created during the task (server terminal, browser):
    ```bash
@@ -62,35 +56,32 @@ When the user asks you to sign off or clean up:
 
 ## Recipe Groups
 
-Everything in the workbench uses `just`, a command runner. Recipes are organized into 3 categories based on their scope:
+Everything in the workbench uses `just`, a command runner. Recipes are split across 3 justfiles, each scoped to its directory level. Lower-level justfiles use `set fallback` to access parent recipes.
 
-| Group | Where to run | Examples |
-|-------|-------------|---------|
-| **workbench** | Workbench root | `worktree-add`, `worktree-remove`, `sync-workbench` |
-| **worktree** | Worktree root | `add-dev`, `server-start`, `server-stop`, `server-restart`, `sync`, `build-all`, `enable-all-extensions` |
-| **repo** | Inside a repo | `build`, `jlpm`, `enable-repo-extensions` |
+| File | Location | Groups | Examples |
+|------|----------|--------|---------|
+| `justfile` | Workbench root | `[workbench]` | `worktree-add`, `sync-workbench`, `get-workbench-root` |
+| `worktree.just` → `justfile` | Worktree root | `[worktree]`, `[worktree-server]` | `add-dev`, `server-start`, `build-all`, `get-worktree-root` |
+| `repo.just` → `justfile` | Repo root | `[repo]` | `build`, `lint`, `pytest`, `ensure-fork` |
 
-- **Workbench recipes** can be run from anywhere inside the workbench (including from within worktrees).
-- **Worktree recipes** can only be run from within a worktree (`worktrees/<name>/`).
-- **Repo recipes** can only be run from inside a repo within a worktree.
+- **Fallback**: repo recipes can call worktree recipes, worktree recipes can call workbench recipes.
+- **Path resolution**: each justfile uses `{{ justfile_directory() }}` as its root. Call `just get-worktree-root` or `just get-workbench-root` from lower levels.
 
 ### Usage examples
 
 ```bash
-# Workbench recipe (from anywhere in the workbench)
+# Workbench recipe (from workbench root)
 just worktree-add my-feature --dev jupyter-ai-router
 
 # Worktree recipe (from inside the worktree)
 just server-start
 
-# Worktree recipe (from the workbench root)
-just worktrees/my-feature/server-start
-
 # Repo recipe (from inside a repo)
-(cd worktrees/my-feature/jupyter-ai-router && just build)
+just build
+just lint
 ```
 
-Run `just --list --unsorted` to see all available recipes grouped.
+Run `just --list --unsorted` to see all available recipes (including fallback parents).
 
 ## Quick Reference
 
@@ -105,7 +96,7 @@ Run `just --list --unsorted` to see all available recipes grouped.
 | Need to spawn a new agent session for an issue | `.kiro/skills/spawn-agent/SKILL.md` (workbench root only) |
 | Need to add a repo not listed in `repos.json` | `CONTRIBUTING.md` |
 | Need to add or modify a justfile recipe | `CONTRIBUTING.md` |
-| Need to understand workbench internals (helpers, `.worktree_info.json`) | `CONTRIBUTING.md` |
+| Need to understand workbench internals (justfile split, `.worktree_info.json`) | `CONTRIBUTING.md` |
 
 ## Modifying recipes or workbench internals
 
