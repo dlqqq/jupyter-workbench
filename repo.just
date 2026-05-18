@@ -9,11 +9,11 @@ repo_name := file_name(justfile_directory())
 list-recipes:
     #!/usr/bin/env bash
     wt_root=$(just get-worktree-root)
-    (cd "$(cd "$wt_root" && just get-workbench-root)" && just --list --list-prefix="")
+    (cd "$(cd "$wt_root" && just get-workbench-root)" && just --list --list-heading="")
     echo ""
-    (cd "$wt_root" && just --list --list-prefix="")
+    (cd "$wt_root" && just --list --list-heading="")
     echo ""
-    just --list --list-prefix=""
+    just --list --list-heading=""
 
 # Run `jlpm` (JupyterLab's bundled version of `yarn`), forwarding given arguments
 [group('repo')]

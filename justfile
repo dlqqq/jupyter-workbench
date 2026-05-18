@@ -8,7 +8,7 @@ get-workbench-root:
 # List all available recipes
 [group('workbench')]
 list-recipes:
-    @just --list --list-prefix=""
+    @just --list --list-heading=""
 
 # Create a new worktree: just worktree-add <name> [--dev] <repos...> [--with <packages...>]
 [group('workbench')]
@@ -63,11 +63,14 @@ worktree-add *args:
     mkdir -p "$wb_root/worktrees"
     git worktree add --detach "$wt"
 
-    # Copy worktree justfile and skills
-    cp "$wb_root/worktree.just" "$wt/justfile"
+    # Symlink worktree justfile and skills to workbench root
+    ln -sf "$wb_root/worktree.just" "$wt/justfile"
+    rm -rf "$wt/.kiro/skills"
     mkdir -p "$wt/.kiro"
-    cp -r "$wb_root/.kiro/skills" "$wt/.kiro/skills"
+    ln -sf "$wb_root/.kiro/skills" "$wt/.kiro/skills"
     [[ -f "$wb_root/.env" ]] && cp "$wb_root/.env" "$wt/.env"
+
+    cd "$wt"
 
     # Write worktree info
     if [[ ${#dev_repos[@]} -gt 0 ]]; then
@@ -87,8 +90,8 @@ worktree-add *args:
         echo "Cloning $repo..."
         git clone "$url" "$repo"
 
-        # Copy repo justfile and exclude it from git
-        cp "$wb_root/repo.just" "$repo/justfile"
+        # Symlink repo justfile and exclude it from git
+        ln -sf "$wb_root/repo.just" "$repo/justfile"
         grep -qxF 'justfile' "$repo/.git/info/exclude" 2>/dev/null || echo 'justfile' >> "$repo/.git/info/exclude"
 
         # Get package parent dirs from repos.json (default: ".")
@@ -151,25 +154,4 @@ worktree-remove-all:
     rm -rf worktrees
     echo "✓ All worktrees removed"
 
-# Sync justfiles and skills to all worktrees
-[group('workbench')]
-sync-workbench:
-    #!/usr/bin/env bash
-    set -eo pipefail
-    wb_root="{{ justfile_directory() }}"
-    for wt in "$wb_root"/worktrees/*/; do
-        [[ -d "$wt" ]] || continue
-        name=$(basename "$wt")
-        cp "$wb_root/worktree.just" "$wt/justfile"
-        rm -rf "$wt/.kiro/skills"
-        mkdir -p "$wt/.kiro"
-        cp -r "$wb_root/.kiro/skills" "$wt/.kiro/skills"
-        # Copy repo.just into each dev repo
-        repos=$(jq -r '.["dev-repos"][]' "$wt/.worktree_info.json" 2>/dev/null)
-        while IFS= read -r repo; do
-            [[ -n "$repo" && -d "$wt/$repo" ]] || continue
-            cp "$wb_root/repo.just" "$wt/$repo/justfile"
-            grep -qxF 'justfile' "$wt/$repo/.git/info/exclude" 2>/dev/null || echo 'justfile' >> "$wt/$repo/.git/info/exclude"
-        done <<< "$repos"
-        echo "✓ $name"
-    done
+

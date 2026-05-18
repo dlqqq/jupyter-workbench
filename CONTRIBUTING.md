@@ -101,7 +101,7 @@ JSON file at the worktree root tracking dev-installed repos and runtime state.
 - `.env` (if present)
 - `repo.just` → `<repo>/justfile` (for each dev repo, also adds to `.git/info/exclude`)
 
-Run `just sync-workbench` to update existing worktrees after modifying these files.
+Worktrees use symlinks to the workbench root for justfiles and skills, so changes are reflected immediately — no sync step needed.
 
 ## Adding a new recipe
 

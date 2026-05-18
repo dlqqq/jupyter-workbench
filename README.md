@@ -42,7 +42,6 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 | `worktree-add <name> [--dev <repos...>] [--with <packages...>]` | Create a new worktree |
 | `worktree-remove <name>` | Remove a worktree |
 | `worktree-remove-all` | Remove all worktrees |
-| `sync-workbench` | Sync justfiles and skills to all worktrees |
 | `get-workbench-root` | Echo the workbench root path |
 
 ### Worktree recipes (`worktree.just` → `justfile`)

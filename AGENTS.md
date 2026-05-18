@@ -60,7 +60,7 @@ Everything in the workbench uses `just`, a command runner. Recipes are split acr
 
 | File | Location | Groups | Examples |
 |------|----------|--------|---------|
-| `justfile` | Workbench root | `[workbench]` | `worktree-add`, `sync-workbench`, `get-workbench-root` |
+| `justfile` | Workbench root | `[workbench]` | `worktree-add`, `get-workbench-root` |
 | `worktree.just` → `justfile` | Worktree root | `[worktree]`, `[worktree-server]` | `add-dev`, `server-start`, `build-all`, `get-worktree-root` |
 | `repo.just` → `justfile` | Repo root | `[repo]` | `build`, `lint`, `pytest`, `ensure-fork` |
 

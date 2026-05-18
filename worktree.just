@@ -12,9 +12,9 @@ get-worktree-root:
 [group('worktree')]
 list-recipes:
     #!/usr/bin/env bash
-    (cd "$(just get-workbench-root)" && just --list --list-prefix="")
+    (cd "$(just get-workbench-root)" && just --list --list-heading="")
     echo ""
-    just --list --list-prefix=""
+    just --list --list-heading=""
 
 # Add a package via uv (same as 'uv add')
 [group('worktree')]
@@ -45,8 +45,8 @@ add-dev repo:
     echo "Cloning $repo..."
     git clone "$url" "$repo"
 
-    # Copy repo justfile and exclude from git
-    cp "$wb_root/repo.just" "$repo/justfile"
+    # Symlink repo justfile and exclude from git
+    ln -sf "$wb_root/repo.just" "$repo/justfile"
     grep -qxF 'justfile' "$repo/.git/info/exclude" 2>/dev/null || echo 'justfile' >> "$repo/.git/info/exclude"
 
     pkg_parents=$(jq -r --arg r "$repo" '
