@@ -39,6 +39,26 @@ You are assigned to a task. Stay in your worktree. If you need another package, 
    - Done: `cmux notify --title "Done: <worktree>" --body "<brief summary>"`
    - Stuck: `cmux notify --title "Stuck: <worktree>" --body "<what's blocking>"`
 
+### Sign-off steps (only when asked)
+
+When the user asks you to sign off or clean up:
+
+1. **Stop the server** — suspend with `ctrl+z`, then kill the process group:
+   ```bash
+   cmux send-key --surface $SERVER_SURFACE ctrl+z
+   sleep 1
+   cmux send --surface $SERVER_SURFACE "pid=\$(jobs -l %1 | awk '{print \$3}'); kill -TERM -- -\$pid\n"
+   sleep 2
+   ```
+
+2. **Close extra surfaces** — close any surfaces created during the task (server terminal, browser):
+   ```bash
+   cmux close-surface --surface $SERVER_SURFACE
+   cmux close-surface --surface $BROWSER_SURFACE
+   ```
+
+3. **Leave only the agent's own terminal** (the one running `kiro-cli chat`).
+
 ## Recipe Groups
 
 Everything in the workbench uses `just`, a command runner. Recipes are organized into 3 categories based on their scope:
