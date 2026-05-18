@@ -8,7 +8,7 @@ Recipes are organized into three groups based on where they can be run:
 
 | Group | Runs from | `$PWD` is | Example |
 |-------|-----------|-----------|---------|
-| **workbench** | Workbench root | Workbench root | `worktree-add`, `worktree-remove`, `sync-worktrees` |
+| **workbench** | Workbench root | Workbench root | `worktree-add`, `worktree-remove`, `sync-workbench` |
 | **worktree** | Worktree root | Worktree root | `add-dev`, `start`, `start-cmux`, `enable-all-extensions` |
 | **repo** | Inside a repo | Repo dir (via `[no-cd]`) | `build`, `enable-repo-extensions` |
 
@@ -100,7 +100,7 @@ Used by `get_worktree_repos` to iterate dev repos without scanning the filesyste
 - `scripts/` (helpers)
 - `.env` (if present)
 
-If you update the justfile, helpers, or skills, existing worktrees will have stale copies. Run `just sync-worktrees` to update them, or create a new worktree.
+If you update the justfile, helpers, or skills, existing worktrees will have stale copies. Run `just sync-workbench` to update them, or create a new worktree.
 
 ## Adding a new recipe
 

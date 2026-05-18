@@ -42,7 +42,7 @@ Workbench recipes can be run from anywhere within the workbench.
 | `worktree-add <name> [--dev <repos...>] [--with <packages...>]` | Create a new worktree |
 | `worktree-remove <name>` | Remove a worktree |
 | `worktree-remove-all` | Remove all worktrees |
-| `sync-worktrees` | Sync justfile, scripts, and skills to all worktrees |
+| `sync-workbench` | Sync justfile, scripts, and skills to all worktrees |
 
 ### Worktree recipes
 

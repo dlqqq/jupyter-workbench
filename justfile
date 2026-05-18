@@ -102,6 +102,9 @@ worktree-add *args:
         just "$wt/enable-all-extensions"
     fi
 
+    # Sync
+    just "$wt/sync"
+
     echo ""
     echo "✓ Worktree '$name' ready at: $wt"
     echo "  cd $wt && just start"
@@ -141,7 +144,7 @@ worktree-remove-all:
 
 # Sync justfile, scripts, and skills to all worktrees
 [group('workbench')]
-sync-worktrees:
+sync-workbench:
     #!/usr/bin/env bash
     set -eo pipefail
     source "{{ helpers }}"
@@ -215,6 +218,15 @@ add-dev repo:
 
     echo ""
     echo "✓ Added: $repo"
+
+# Alias for `uv sync`
+[group('worktree')]
+sync *args:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    source "{{ helpers }}"
+    get_worktree_root "$PWD" || exit 1
+    uv sync
 
 # Start JupyterLab
 [group('worktree')]

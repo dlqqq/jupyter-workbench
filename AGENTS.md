@@ -66,8 +66,8 @@ Everything in the workbench uses `just`, a command runner. Recipes are organized
 
 | Group | Where to run | Examples |
 |-------|-------------|---------|
-| **workbench** | Workbench root | `worktree-add`, `worktree-remove`, `sync-worktrees` |
-| **worktree** | Worktree root | `add-dev`, `start`, `start-cmux`, `build-all`, `enable-all-extensions` |
+| **workbench** | Workbench root | `worktree-add`, `worktree-remove`, `sync-workbench` |
+| **worktree** | Worktree root | `add-dev`, `start`, `start-cmux`, `sync`, `build-all`, `enable-all-extensions` |
 | **repo** | Inside a repo | `build`, `jlpm`, `enable-repo-extensions` |
 
 - **Workbench recipes** can be run from anywhere inside the workbench (including from within worktrees).
