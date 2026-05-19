@@ -6,7 +6,7 @@ A lightweight Jupyter extension development orchestrator. Create parallel worksp
 
 ```bash
 # Create a workspace with specific packages for development
-just workspace-add my-feature --dev jupyter-ai-acp-client jupyter-ai-persona-manager
+just workspace-add my-feature --dev=jupyter-ai-acp-client,jupyter-ai-persona-manager
 
 # Start JupyterLab from the workspace
 cd workspaces/my-feature
@@ -39,7 +39,7 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 
 | Recipe | Description |
 |--------|-------------|
-| `workspace-add <name> [--dev <repos...>] [--with <packages...>]` | Create a new workspace |
+| `workspace-add <name> [--dev=<repos>] [--with=<pkgs>]` | Create a new workspace |
 | `workspace-remove <name>` | Remove a workspace |
 | `workspace-remove-all` | Remove all workspaces |
 | `get-workbench-root` | Echo the workbench root path |

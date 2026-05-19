@@ -16,21 +16,27 @@ list-recipes:
     echo ""
     just --list --list-heading=""
 
-# Add a package via uv (same as 'uv add')
+# Add packages via uv (comma-separated)
 [group('workspace')]
-add +pkgs:
-    uv add {{ pkgs }}
+[arg("pkgs", help="comma-separated packages to add")]
+add pkgs:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    IFS=',' read -ra packages <<< "{{ pkgs }}"
+    uv add "${packages[@]}"
 
-# Add a package as editable (clone, build, dev-install)
+# Add repos as editable (comma-separated: clone, build, dev-install)
 [group('workspace')]
-add-dev repo:
+[arg("repos", help="comma-separated repos to dev-install")]
+add-dev repos:
     #!/usr/bin/env bash
     set -eo pipefail
     ws_root="{{ ws_root }}"
     wb_root=$(just get-workbench-root)
     cd "$ws_root"
 
-    repo="{{ repo }}"
+    IFS=',' read -ra repo_list <<< "{{ repos }}"
+    for repo in "${repo_list[@]}"; do
     url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$ws_root/repos.json")
     if [[ -z "$url" ]]; then
         echo "Error: '$repo' not found in repos.json" >&2
@@ -63,11 +69,12 @@ add-dev repo:
         && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
 
     # Enable extensions
-    cd "$repo"
-    just enable-repo-extensions
+    (cd "$repo"
+    just enable-repo-extensions)
 
     echo ""
     echo "✓ Added: $repo"
+    done
 
 # Alias for `uv sync`
 [group('workspace')]

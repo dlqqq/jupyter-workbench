@@ -63,7 +63,7 @@ Package abbreviations:
 
 Run from the workbench root:
 ```bash
-just workspace-add <name> --dev <repos...> [--with <packages...>]
+just workspace-add <name> --dev=<repos> [--with=<pkgs>]
 ```
 
 ### Step 6: Write PLAN.md

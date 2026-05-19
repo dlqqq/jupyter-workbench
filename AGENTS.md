@@ -71,7 +71,7 @@ Everything in the workbench uses `just`, a command runner. Recipes are split acr
 
 ```bash
 # Workbench recipe (from workbench root)
-just workspace-add my-feature --dev jupyter-ai-router
+just workspace-add my-feature --dev=jupyter-ai-router
 
 # Workspace recipe (from inside the workspace)
 just server-start

@@ -10,38 +10,24 @@ get-workbench-root:
 list-recipes:
     @just --list --list-heading=""
 
-# Create a new workspace: just workspace-add <name> [--dev] <repos...> [--with <packages...>]
+# Create a new workspace
 [group('workbench')]
-workspace-add *args:
+[arg("name", help="workspace name")]
+[arg("dev", long, help="comma-separated repos to dev-install")]
+[arg("with_pkgs", long="with", help="comma-separated PyPI packages to add")]
+workspace-add name dev="" with_pkgs="":
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
     cd "$wb_root"
 
-    # Parse arguments
-    name=""
-    dev_repos=()
-    with_pkgs=()
-    mode="dev"
+    name="{{ name }}"
+    IFS=',' read -ra dev_repos <<< "{{ dev }}"
+    IFS=',' read -ra with_pkgs <<< "{{ with_pkgs }}"
 
-    for arg in {{ args }}; do
-        case "$arg" in
-            --dev)  mode="dev"; continue ;;
-            --with) mode="with"; continue ;;
-        esac
-        if [[ -z "$name" ]]; then
-            name="$arg"
-        elif [[ "$mode" == "dev" ]]; then
-            dev_repos+=("$arg")
-        else
-            with_pkgs+=("$arg")
-        fi
-    done
-
-    if [[ -z "$name" ]]; then
-        echo "Usage: just workspace-add <name> [--dev <repos...>] [--with <packages...>]" >&2
-        exit 1
-    fi
+    # Remove empty elements from empty defaults
+    [[ -z "${dev_repos[0]}" ]] && dev_repos=()
+    [[ -z "${with_pkgs[0]}" ]] && with_pkgs=()
 
     # Validate dev repo names
     for repo in "${dev_repos[@]}"; do
@@ -122,44 +108,48 @@ workspace-add *args:
     echo "✓ Workspace '$name' ready at: $ws"
     echo "  cd $ws && just server-start"
 
-# Remove a workspace
+# Remove workspaces (comma-separated, or --all)
 [group('workbench')]
-workspace-remove name:
+[arg("names", help="comma-separated workspace names (ignored with --all)")]
+[arg("all", long, value="true")]
+workspace-remove names="" all="false":
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
-    ws="$wb_root/workspaces/{{ name }}"
-    if [[ ! -d "$ws" ]]; then
-        echo "Error: workspace '{{ name }}' not found" >&2
-        exit 1
-    fi
-    # Stop server if running
-    pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
-    if [[ -n "$pgid" ]]; then
-        echo "Stopping server..."
-        kill -TERM -- -"$pgid" 2>/dev/null || true
-        sleep 1
-    fi
-    rm -rf "$ws"
-    echo "✓ Removed workspace '{{ name }}'"
 
-# Remove all workspaces and start fresh
-[group('workbench')]
-workspace-remove-all:
-    #!/usr/bin/env bash
-    set -eo pipefail
-    wb_root="{{ justfile_directory() }}"
-    for ws in "$wb_root"/workspaces/*/; do
-        [[ -d "$ws" ]] || continue
-        name=$(basename "$ws")
-        # Stop server if running
-        pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
-        if [[ -n "$pgid" ]]; then
-            kill -TERM -- -"$pgid" 2>/dev/null || true
+    if [[ "{{ all }}" == "true" ]]; then
+        for ws in "$wb_root"/workspaces/*/; do
+            [[ -d "$ws" ]] || continue
+            name=$(basename "$ws")
+            pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
+            if [[ -n "$pgid" ]]; then
+                kill -TERM -- -"$pgid" 2>/dev/null || true
+            fi
+            echo "Removing $name..."
+        done
+        rm -rf "$wb_root/workspaces"
+        echo "✓ All workspaces removed"
+    else
+        if [[ -z "{{ names }}" ]]; then
+            echo "Usage: just workspace-remove <names> or just workspace-remove --all" >&2
+            exit 1
         fi
-        echo "Removing $name..."
-    done
-    rm -rf "$wb_root/workspaces"
-    echo "✓ All workspaces removed"
+        IFS=',' read -ra name_list <<< "{{ names }}"
+        for name in "${name_list[@]}"; do
+            ws="$wb_root/workspaces/$name"
+            if [[ ! -d "$ws" ]]; then
+                echo "Error: workspace '$name' not found" >&2
+                exit 1
+            fi
+            pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
+            if [[ -n "$pgid" ]]; then
+                echo "Stopping server..."
+                kill -TERM -- -"$pgid" 2>/dev/null || true
+                sleep 1
+            fi
+            rm -rf "$ws"
+            echo "✓ Removed workspace '$name'"
+        done
+    fi
 
 
