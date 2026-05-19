@@ -42,7 +42,7 @@ add-dev repos:
     pr_number="${repo#*#}"
     [[ "$pr_number" == "$repo" ]] && pr_number=""
 
-    url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$(just get-workbench-root)/repos.json")
+    url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$wb_root/repos.json")
     if [[ -z "$url" ]]; then
         echo "Error: '$repo_name' not found in repos.json" >&2
         exit 1
@@ -76,15 +76,21 @@ add-dev repos:
     pkg_parents=$(jq -r --arg r "$repo_name" '
         .[$r].packages // [{"parentDir": "."}]
         | .[].parentDir
-    ' "$(just get-workbench-root)/repos.json")
+    ' "$wb_root/repos.json")
 
     while IFS= read -r parent_dir; do
         uv add --editable --workspace "./$repo_name/$parent_dir"
     done <<< "$pkg_parents"
 
     # Update .workspace_info.json
-    jq --arg repo "$repo_name" '.["dev-repos"] += [$repo]' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
-        && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
+    if [[ -n "$pr_number" ]]; then
+        jq --arg r "$repo_name" --argjson pr "$pr_number" '.["dev-repos"][$r] = {"pr-number": $pr}' \
+            "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp"
+    else
+        jq --arg r "$repo_name" '.["dev-repos"][$r] = {}' \
+            "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp"
+    fi
+    mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
 
     # Enable extensions
     (cd "$repo_name"
@@ -105,7 +111,7 @@ workspace-status:
     #!/usr/bin/env bash
     set -eo pipefail
     echo "Dev-installed repos:"
-    jq -r '.["dev-repos"][]' "{{ ws_root }}/.workspace_info.json"
+    jq -r '.["dev-repos"] | keys[]' "{{ ws_root }}/.workspace_info.json"
 
 # Enable extensions for all dev-installed repos in this workspace
 [group('workspace')]
@@ -113,7 +119,7 @@ enable-all-extensions:
     #!/usr/bin/env bash
     set -eo pipefail
     ws_root="{{ ws_root }}"
-    repos=$(jq -r '.["dev-repos"][]' "$ws_root/.workspace_info.json")
+    repos=$(jq -r '.["dev-repos"] | keys[]' "$ws_root/.workspace_info.json")
     while IFS= read -r repo; do
         [[ -n "$repo" ]] || continue
         echo "=== $repo ==="
@@ -126,12 +132,83 @@ build-all:
     #!/usr/bin/env bash
     set -eo pipefail
     ws_root="{{ ws_root }}"
-    repos=$(jq -r '.["dev-repos"][]' "$ws_root/.workspace_info.json")
+    repos=$(jq -r '.["dev-repos"] | keys[]' "$ws_root/.workspace_info.json")
     while IFS= read -r repo; do
         [[ -n "$repo" ]] || continue
         echo "=== $repo ==="
         (cd "$ws_root/$repo" && just build)
     done <<< "$repos"
+
+# Run full workspace setup (clone repos, install, enable extensions)
+[group('workspace')]
+setup-workspace:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_name=$(basename "{{ ws_root }}")
+    trap 'cmux notify --title "Setup failed: $ws_name" --body "$BASH_COMMAND exited with $?"' ERR
+    just _clone-repos
+    just enable-all-extensions
+    just sync
+
+# Clone and dev-install all repos from .workspace_info.json
+[private]
+_clone-repos:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
+    wb_root=$(just get-workbench-root)
+    cd "$ws_root"
+
+    while IFS= read -r repo_name; do
+        [[ -n "$repo_name" ]] || continue
+        pr_number=$(jq -r --arg r "$repo_name" '.["dev-repos"][$r]["pr-number"] // empty' "$ws_root/.workspace_info.json")
+        url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$wb_root/repos.json")
+        if [[ -z "$url" ]]; then
+            echo "Error: '$repo_name' not found in repos.json" >&2
+            exit 1
+        fi
+
+        echo "Cloning $repo_name..."
+        git clone "$url" "$repo_name"
+
+        if [[ -n "$pr_number" ]]; then
+            echo "Checking out PR #$pr_number..."
+            (cd "$repo_name" && gh pr checkout "$pr_number")
+            pr_info=$(cd "$repo_name" && gh pr view "$pr_number" --json headRepositoryOwner,headRepository)
+            pr_author=$(echo "$pr_info" | jq -r '.headRepositoryOwner.login')
+            pr_repo=$(echo "$pr_info" | jq -r '.headRepository.name')
+            fork_url="git@github.com:$pr_author/$pr_repo.git"
+            (cd "$repo_name" && git remote add "$pr_author" "$fork_url" 2>/dev/null || true)
+            echo "Added remote '$pr_author' → $fork_url"
+        fi
+
+        ln -sf "$wb_root/repo.just" "$repo_name/justfile"
+        grep -qxF 'justfile' "$repo_name/.git/info/exclude" 2>/dev/null || echo 'justfile' >> "$repo_name/.git/info/exclude"
+
+        pkg_parents=$(jq -r --arg r "$repo_name" '
+            .[$r].packages // [{"parentDir": "."}]
+            | .[].parentDir
+        ' "$wb_root/repos.json")
+
+        while IFS= read -r parent_dir; do
+            uv add --editable --workspace "./$repo_name/$parent_dir"
+        done <<< "$pkg_parents"
+
+        echo "✓ Cloned: $repo_name"
+    done < <(jq -r '.["dev-repos"] | keys[]' "$ws_root/.workspace_info.json")
+
+# Spawn an agent session using the prompt from .workspace_info.json
+[group('workspace')]
+spawn-agent:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
+    prompt=$(jq -r '.prompt // empty' "$ws_root/.workspace_info.json")
+    if [[ -z "$prompt" ]]; then
+        echo "Error: no prompt found in .workspace_info.json" >&2
+        exit 1
+    fi
+    exec kiro-cli chat --agent dlq -a "$prompt"
 
 ################################################################################
 # Server recipes

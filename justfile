@@ -15,12 +15,14 @@ get-workbench-root:
 list-recipes:
     @just --list --list-heading=""
 
-# Create a new workspace
+# Create a new workspace (non-blocking: setup runs in the new cmux workspace)
 [group('workbench')]
 [arg("name", help="workspace name")]
 [arg("dev", long, help="comma-separated repos to dev-install")]
 [arg("with_pkgs", long="with", help="comma-separated PyPI packages to add")]
-add-workspace name dev="" with_pkgs="":
+[arg("spawn_agent", long="spawn-agent", value="true")]
+[arg("prompt", long, help="agent prompt (requires --spawn-agent)")]
+add-workspace name dev="" with_pkgs="" spawn_agent="false" prompt="":
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
@@ -61,77 +63,33 @@ add-workspace name dev="" with_pkgs="":
     ln -sf "$wb_root/.kiro/skills" "$ws/.kiro/skills"
     [[ -f "$wb_root/.env" ]] && cp "$wb_root/.env" "$ws/.env"
 
-    cd "$ws"
-
-    # Write workspace info (use repo names without #pr suffix)
-    if [[ ${#dev_repos[@]} -gt 0 ]]; then
-        repos_json=$(printf '%s\n' "${dev_repos[@]}" | sed 's/#.*//' | jq -R . | jq -s .)
-    else
-        repos_json="[]"
-    fi
-    jq -n --argjson repos "$repos_json" \
-        '{"dev-repos": $repos, "workspace_id": "", "server": null, "browser": null}' \
-        > "$ws/.workspace_info.json"
-
-    cd "$ws"
-
-    # Clone and dev-install repos
+    # Write workspace info with dev-repos as object
+    repos_obj="{}"
     for repo in "${dev_repos[@]}"; do
         repo_name="${repo%%#*}"
         pr_number="${repo#*#}"
         [[ "$pr_number" == "$repo" ]] && pr_number=""
-
-        url=$(jq -r --arg r "$repo_name" '.[$r].url' "$wb_root/repos.json")
-        echo "Cloning $repo_name..."
-        git clone "$url" "$repo_name"
-
-        # Checkout PR if specified
         if [[ -n "$pr_number" ]]; then
-            echo "Checking out PR #$pr_number..."
-            (cd "$repo_name" && gh pr checkout "$pr_number")
-            # Add PR author's fork as a remote
-            pr_info=$(cd "$repo_name" && gh pr view "$pr_number" --json headRepositoryOwner,headRepository)
-            pr_author=$(echo "$pr_info" | jq -r '.headRepositoryOwner.login')
-            pr_repo_name=$(echo "$pr_info" | jq -r '.headRepository.name')
-            fork_url="git@github.com:$pr_author/$pr_repo_name.git"
-            (cd "$repo_name" && git remote add "$pr_author" "$fork_url" 2>/dev/null || true)
-            echo "Added remote '$pr_author' → $fork_url"
+            repos_obj=$(echo "$repos_obj" | jq --arg r "$repo_name" --argjson pr "$pr_number" '.[$r] = {"pr-number": $pr}')
+        else
+            repos_obj=$(echo "$repos_obj" | jq --arg r "$repo_name" '.[$r] = {}')
         fi
-
-        # Symlink repo justfile and exclude it from git
-        ln -sf "$wb_root/repo.just" "$repo_name/justfile"
-        grep -qxF 'justfile' "$repo_name/.git/info/exclude" 2>/dev/null || echo 'justfile' >> "$repo_name/.git/info/exclude"
-
-        # Get package parent dirs from repos.json (default: ".")
-        pkg_parents=$(jq -r --arg r "$repo_name" '
-            .[$r].packages // [{"parentDir": "."}]
-            | .[].parentDir
-        ' "$wb_root/repos.json")
-
-        while IFS= read -r parent_dir; do
-            uv add --editable --workspace "./$repo_name/$parent_dir"
-        done <<< "$pkg_parents"
     done
+    prompt="{{ prompt }}"
+    jq -n --argjson repos "$repos_obj" --arg prompt "$prompt" \
+        '{"dev-repos": $repos, "prompt": $prompt, "server": null, "browser": null}' \
+        > "$ws/.workspace_info.json"
 
-    # Install --with packages from PyPI
-    if [[ ${#with_pkgs[@]} -gt 0 ]]; then
-        echo "Adding PyPI packages: ${with_pkgs[*]}"
-        uv add "${with_pkgs[@]}"
+    # Build command to run in the new workspace
+    if [[ "{{ spawn_agent }}" == "true" ]]; then
+        cmd="just setup-workspace && just spawn-agent"
+    else
+        cmd="just setup-workspace && cmux notify --title 'Setup done: $name' --body 'Ready'"
     fi
 
-    # Enable extensions
-    if [[ ${#dev_repos[@]} -gt 0 ]]; then
-        just enable-all-extensions
-    fi
-
-    # Sync
-    just sync
-
-    cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws")
-    echo ""
-    echo "✓ Workspace '$name' ready at: $ws"
-    echo "✓ cmux workspace ready: $cmux_ws"
-    echo "  cd $ws && just start-server"
+    cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$cmd")
+    echo "✓ Workspace '$name' created at: $ws"
+    echo "✓ Setup running in cmux workspace: $cmux_ws"
 
 # Remove workspaces (comma-separated, or --all, or --except)
 [group('workbench')]
