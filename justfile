@@ -1,5 +1,10 @@
 set dotenv-load := true
 
+alias addws := add-workspace
+alias rmws := remove-workspaces
+alias addwt := add-worktree
+alias rmwt := remove-worktree
+alias list := list-recipes
 # Echo the workbench root directory
 [group('workbench')]
 get-workbench-root:

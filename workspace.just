@@ -1,6 +1,7 @@
 set dotenv-load := true
 set fallback
 
+alias list := list-recipes
 ws_root := justfile_directory()
 
 # Echo the workspace root directory

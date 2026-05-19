@@ -1,6 +1,7 @@
 set dotenv-load := true
 set fallback
 
+alias list := list-recipes
 repo_root := justfile_directory()
 repo_name := file_name(justfile_directory())
 
