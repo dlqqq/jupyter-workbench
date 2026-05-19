@@ -133,49 +133,74 @@ add-workspace name dev="" with_pkgs="":
     echo "✓ cmux workspace ready: $cmux_ws"
     echo "  cd $ws && just start-server"
 
-# Remove workspaces (comma-separated, or --all)
+# Remove workspaces (comma-separated, or --all, or --except)
 [group('workbench')]
 [arg("names", help="comma-separated workspace names (ignored with --all)")]
 [arg("all", long, value="true")]
-remove-workspaces names="" all="false":
+[arg("except", long="except", short="x", help="remove all EXCEPT these comma-separated names")]
+remove-workspaces names="" all="false" except="":
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
 
-    if [[ "{{ all }}" == "true" ]]; then
+    if [[ -n "{{ except }}" && -n "{{ names }}" ]]; then
+        echo "Error: --except cannot be used with a names list. Use --except alone to remove all except the listed items." >&2
+        exit 1
+    fi
+    if [[ -n "{{ except }}" && "{{ all }}" == "true" ]]; then
+        echo "Error: --except cannot be used with --all." >&2
+        exit 1
+    fi
+
+    # Build the list of workspaces to remove
+    targets=()
+    if [[ -n "{{ except }}" ]]; then
+        IFS=',' read -ra keep_list <<< "{{ except }}"
         for ws in "$wb_root"/workspaces/*/; do
             [[ -d "$ws" ]] || continue
             name=$(basename "$ws")
-            pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
-            if [[ -n "$pgid" ]]; then
-                kill -TERM -- -"$pgid" 2>/dev/null || true
-            fi
-            echo "Removing $name..."
+            [[ "$name" == "templates" ]] && continue
+            skip=false
+            for keep in "${keep_list[@]}"; do
+                [[ "$name" == "$keep" ]] && skip=true && break
+            done
+            [[ "$skip" == "false" ]] && targets+=("$name")
         done
-        rm -rf "$wb_root/workspaces"
-        echo "✓ All workspaces removed"
+    elif [[ "{{ all }}" == "true" ]]; then
+        for ws in "$wb_root"/workspaces/*/; do
+            [[ -d "$ws" ]] || continue
+            name=$(basename "$ws")
+            [[ "$name" == "templates" ]] && continue
+            targets+=("$name")
+        done
     else
         if [[ -z "{{ names }}" ]]; then
-            echo "Usage: just remove-workspaces <names> or just remove-workspaces --all" >&2
+            echo "Usage: just remove-workspaces <names> | --all | --except <names>" >&2
             exit 1
         fi
-        IFS=',' read -ra name_list <<< "{{ names }}"
-        for name in "${name_list[@]}"; do
-            ws="$wb_root/workspaces/$name"
-            if [[ ! -d "$ws" ]]; then
-                echo "Error: workspace '$name' not found" >&2
-                exit 1
-            fi
-            pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
-            if [[ -n "$pgid" ]]; then
-                echo "Stopping server..."
-                kill -TERM -- -"$pgid" 2>/dev/null || true
-                sleep 1
-            fi
-            rm -rf "$ws"
-            echo "✓ Removed workspace '$name'"
-        done
+        IFS=',' read -ra targets <<< "{{ names }}"
     fi
+
+    for name in "${targets[@]}"; do
+        just _remove-workspace-one "$name"
+    done
+
+[private]
+_remove-workspace-one name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    wb_root="{{ justfile_directory() }}"
+    ws="$wb_root/workspaces/{{ name }}"
+    if [[ ! -d "$ws" ]]; then
+        echo "Error: workspace '{{ name }}' not found" >&2
+        exit 1
+    fi
+    pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
+    if [[ -n "$pgid" ]]; then
+        kill -TERM -- -"$pgid" 2>/dev/null || true
+    fi
+    rm -rf "$ws"
+    echo "✓ Removed workspace '{{ name }}'"
 
 
 
@@ -198,11 +223,48 @@ add-worktree name:
     echo "✓ cmux workspace ready: $cmux_ws"
     echo "  cd $wt"
 
-# Remove a workbench worktree
+# Remove workbench worktrees (comma-separated, or --except)
 [group('workbench')]
-[arg("name", help="worktree name")]
+[arg("names", help="comma-separated worktree names")]
 [arg("force", long, value="true")]
-remove-worktree name force="false":
+[arg("except", long="except", short="x", help="remove all EXCEPT these comma-separated names")]
+remove-worktree names="" force="false" except="":
+    #!/usr/bin/env bash
+    set -eo pipefail
+    wb_root="{{ justfile_directory() }}"
+
+    if [[ -n "{{ except }}" && -n "{{ names }}" ]]; then
+        echo "Error: --except cannot be used with a names list. Use --except alone to remove all except the listed items." >&2
+        exit 1
+    fi
+
+    # Build the list of worktrees to remove
+    targets=()
+    if [[ -n "{{ except }}" ]]; then
+        IFS=',' read -ra keep_list <<< "{{ except }}"
+        for wt in "$wb_root"/worktrees/*/; do
+            [[ -d "$wt" ]] || continue
+            name=$(basename "$wt")
+            skip=false
+            for keep in "${keep_list[@]}"; do
+                [[ "$name" == "$keep" ]] && skip=true && break
+            done
+            [[ "$skip" == "false" ]] && targets+=("$name")
+        done
+    else
+        if [[ -z "{{ names }}" ]]; then
+            echo "Usage: just remove-worktree <names> | --except <names>" >&2
+            exit 1
+        fi
+        IFS=',' read -ra targets <<< "{{ names }}"
+    fi
+
+    for name in "${targets[@]}"; do
+        just _remove-worktree-one "$name" "{{ force }}"
+    done
+
+[private]
+_remove-worktree-one name force="false":
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
@@ -211,20 +273,16 @@ remove-worktree name force="false":
         echo "Error: worktree '{{ name }}' not found" >&2
         exit 1
     fi
-
     if [[ "{{ force }}" != "true" ]]; then
-        # Check for uncommitted changes
         if [[ -n "$(git -C "$wt" status --porcelain)" ]]; then
             echo "Error: worktree '{{ name }}' has uncommitted changes. Use --force to override." >&2
             exit 1
         fi
-        # Check if branch is merged
         if ! git merge-base --is-ancestor "{{ name }}" main; then
             echo "Error: branch '{{ name }}' has unmerged commits. Push and merge first, or use --force." >&2
             exit 1
         fi
     fi
-
     git worktree remove "$wt" --force
     git branch -D "{{ name }}" 2>/dev/null || true
     echo "✓ Removed worktree '{{ name }}'"
