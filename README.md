@@ -40,16 +40,15 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 | Recipe | Description |
 |--------|-------------|
 | `workspace-add <name> [--dev=<repos>] [--with=<pkgs>]` | Create a new workspace |
-| `workspace-remove <name>` | Remove a workspace |
-| `workspace-remove-all` | Remove all workspaces |
+| `workspace-remove <names> [--all]` | Remove workspaces (comma-separated, or --all) |
 | `get-workbench-root` | Echo the workbench root path |
 
 ### Workspace recipes (`workspace.just` → `justfile`)
 
 | Recipe | Description |
 |--------|-------------|
-| `add-dev <repo>` | Clone + editable install a package |
-| `add <pkgs...>` | Add PyPI packages (wrapper around `uv add`) |
+| `add-dev <repos>` | Clone + editable install repos (comma-separated) |
+| `add <pkgs>` | Add PyPI packages (comma-separated) |
 | `sync` | Sync the venv (`uv sync`) |
 | `server-start` | Start JupyterLab in a new tab + open browser |
 | `server-stop` | Stop the JupyterLab server |
