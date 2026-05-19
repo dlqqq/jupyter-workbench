@@ -75,8 +75,11 @@ JSON file at the workspace root tracking dev-installed repos and runtime state.
 
 ```json
 {
-  "dev-repos": ["jupyter-ai-router", "jupyter-chat"],
-  "workspace_id": "",
+  "dev-repos": {
+    "jupyter-ai-router": {},
+    "jupyter-chat": { "pr-number": 42 }
+  },
+  "prompt": "",
   "server": {
     "surface_id": "surface:19",
     "url": "http://localhost:8888/",
@@ -90,7 +93,8 @@ JSON file at the workspace root tracking dev-installed repos and runtime state.
 }
 ```
 
-- `dev-repos`: managed by `add-workspace` and `add-dev`
+- `dev-repos`: object mapping repo names to options (optional `pr-number`). Managed by `add-workspace` and `add-dev`.
+- `prompt`: optional agent prompt for `spawn-agent`
 - `server`/`browser`: managed by `just start-server` and `just stop-server` (null when server is not running)
 
 ## Files copied to workspaces

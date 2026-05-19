@@ -13,7 +13,7 @@ You manage the workbench. Your job is to create workspaces for new tasks and spa
 
 | Recipe | Description |
 |--------|-------------|
-| `add-workspace <name> [--dev=<repos>] [--with=<pkgs>]` | Create a new workspace |
+| `add-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
 | `remove-workspaces <names> [--all]` | Remove workspaces |
 | `add-worktree <name>` | Create a workbench worktree |
 | `remove-worktree <name> [--force]` | Remove a workbench worktree |

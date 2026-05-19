@@ -59,12 +59,19 @@ Package abbreviations:
 - `jupyter-server-mcp` → `mcp`
 - `jupyterlab-commands-toolkit` → `cmdtk`
 
-### Step 5: Create the workspace
+### Step 5: Create workspace and spawn agent
 
 Run from the workbench root:
 ```bash
-just add-workspace <name> --dev=<repos> [--with=<pkgs>]
+just add-workspace <name> --dev=<repos> [--with=<pkgs>] --spawn-agent --prompt="$PROMPT"
 ```
+
+Where `$PROMPT` is:
+```
+You are a worker agent assigned to the <workspace-name> workspace under the Jupyter Workbench. First, read AGENTS.md if it is not already in your context. It describes the available recipes, skills, and general workflow for working in a workspace. Then read PLAN.md for your specific task. Follow the worker agent workflow described in AGENTS.md. Notify the user once you are complete or get stuck.
+```
+
+This returns immediately (non-blocking). The workspace directory is created synchronously before the command returns.
 
 ### Step 6: Write PLAN.md
 
@@ -75,21 +82,6 @@ Write `PLAN.md` to the workspace root with:
 - Implementation guidance (level of detail depends on complexity)
 
 Do NOT repeat general workflow info (build/restart/test/notify commands) — the worker agent will read that from AGENTS.md automatically.
-
-### Step 7: Create cmux workspace and launch agent
-
-```bash
-# Create a new cmux workspace named after the workspace
-cmux new-workspace --name "<workspace-name>"
-
-# Get the workspace ref and surface ref
-cmux list-pane-surfaces --workspace <workspace-ref> --json
-
-# Build the prompt and send
-PROMPT="You are a worker agent assigned to the <workspace-name> workspace under the Jupyter Workbench. First, read AGENTS.md if it is not already in your context. It describes the available recipes, skills, and general workflow for working in a workspace. Then read PLAN.md for your specific task. Follow the worker agent workflow described in AGENTS.md. Notify the user once you are complete or get stuck."
-
-cmux send --workspace <workspace-ref> --surface <surface-ref> "cd <workspace-path> && kiro-cli chat --agent dlq -a '$PROMPT'\n"
-```
 
 ## Notes
 

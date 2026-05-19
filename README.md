@@ -39,7 +39,7 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 
 | Recipe | Description |
 |--------|-------------|
-| `add-workspace <name> [--dev=<repos>] [--with=<pkgs>]` | Create a new workspace |
+| `add-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
 | `remove-workspaces <names> [--all]` | Remove workspaces (comma-separated, or --all) |
 | `add-worktree <name>` | Create a workbench worktree (git branch) |
 | `remove-worktree <name> [--force]` | Remove a workbench worktree |
@@ -60,6 +60,7 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 | `enable-all-extensions` | Enable extensions for all dev repos |
 | `build-all` | Build all dev repos |
 | `get-workspace-root` | Echo the workspace root path |
+| `setup-workspace` | Clone repos, install, enable extensions (runs automatically) |
 
 ### Repo recipes (`repo.just` → `justfile`)
 
