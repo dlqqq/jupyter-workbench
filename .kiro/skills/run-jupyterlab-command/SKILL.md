@@ -12,10 +12,10 @@ Execute any registered JupyterLab command programmatically through `cmux browser
 The server must be started with `--expose-app-in-browser` to expose the app on `window.jupyterapp`:
 
 ```bash
-just server-start
+just start-server
 ```
 
-If the server is already running without this flag, run `just server-restart`.
+If the server is already running without this flag, run `just restart-server`.
 
 ## Executing a Command
 

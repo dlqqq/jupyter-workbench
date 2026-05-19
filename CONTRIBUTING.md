@@ -90,12 +90,12 @@ JSON file at the workspace root tracking dev-installed repos and runtime state.
 }
 ```
 
-- `dev-repos`: managed by `workspace-add` and `add-dev`
-- `server`/`browser`: managed by `just server-start` and `just server-stop` (null when server is not running)
+- `dev-repos`: managed by `add-workspace` and `add-dev`
+- `server`/`browser`: managed by `just start-server` and `just stop-server` (null when server is not running)
 
 ## Files copied to workspaces
 
-`workspace-add` copies from `workspaces/templates/` into each new workspace:
+`add-workspace` copies from `workspaces/templates/` into each new workspace:
 - `pyproject.toml`
 - `jupyter_server_config.py`
 - `AGENTS.md`
@@ -107,9 +107,9 @@ It also symlinks from the workbench root (changes reflected immediately):
 
 ## Workbench worktrees
 
-`worktree-add` creates a git worktree of `jupyter-workbench` itself for editing workbench infrastructure in parallel. The worktree is a full checkout on its own branch — no copying or symlinking needed.
+`add-worktree` creates a git worktree of `jupyter-workbench` itself for editing workbench infrastructure in parallel. The worktree is a full checkout on its own branch — no copying or symlinking needed.
 
-`worktree-remove` checks for uncommitted changes and unmerged commits before removing. Use `--force` to skip safety checks.
+`remove-worktree` checks for uncommitted changes and unmerged commits before removing. Use `--force` to skip safety checks.
 
 ## Adding a new recipe
 

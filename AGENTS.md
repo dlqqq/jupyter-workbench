@@ -13,10 +13,10 @@ You manage the workbench. Your job is to create workspaces for new tasks and spa
 
 | Recipe | Description |
 |--------|-------------|
-| `workspace-add <name> [--dev=<repos>] [--with=<pkgs>]` | Create a new workspace |
-| `workspace-remove <names> [--all]` | Remove workspaces |
-| `worktree-add <name>` | Create a workbench worktree |
-| `worktree-remove <name> [--force]` | Remove a workbench worktree |
+| `add-workspace <name> [--dev=<repos>] [--with=<pkgs>]` | Create a new workspace |
+| `remove-workspaces <names> [--all]` | Remove workspaces |
+| `add-worktree <name>` | Create a workbench worktree |
+| `remove-worktree <name> [--force]` | Remove a workbench worktree |
 
 ## Worktree worker (inside `worktrees/<name>/`)
 
@@ -27,10 +27,10 @@ You are editing workbench infrastructure (recipes, skills, docs, templates). You
 1. **Make your changes** — edit justfiles, skills, docs, templates, etc.
 2. **Test** — create a workspace to verify recipe changes work:
    ```bash
-   just workspace-add test --dev=<repo>
+   just add-workspace test --dev=<repo>
    cd workspaces/test
    # test your changes
-   just workspace-remove test
+   just remove-workspaces test
    ```
 3. **Commit and push** your branch.
 4. **Open a PR** — `gh pr create`
