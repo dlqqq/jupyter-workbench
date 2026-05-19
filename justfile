@@ -104,8 +104,10 @@ add-workspace name dev="" with_pkgs="":
     # Sync
     just sync
 
+    cmux_ws=$(cmux new-workspace --name "[ws] $name")
     echo ""
     echo "✓ Workspace '$name' ready at: $ws"
+    echo "✓ cmux workspace ready: $cmux_ws"
     echo "  cd $ws && just start-server"
 
 # Remove workspaces (comma-separated, or --all)
