@@ -80,6 +80,9 @@ JSON file at the workspace root tracking dev-installed repos and runtime state.
     "jupyter-chat": { "pr-number": 42 }
   },
   "prompt": "",
+  "agent": {
+    "pgid": 12350
+  },
   "server": {
     "surface_id": "surface:19",
     "url": "http://localhost:8888/",
@@ -95,6 +98,7 @@ JSON file at the workspace root tracking dev-installed repos and runtime state.
 
 - `dev-repos`: object mapping repo names to options (optional `pr-number`). Managed by `add-workspace` and `add-dev`.
 - `prompt`: optional agent prompt for `spawn-agent`
+- `agent`: managed by `spawn-agent` and `stop-agent` (null when agent is not running)
 - `server`/`browser`: managed by `just start-server` and `just stop-server` (null when server is not running)
 
 ## Files copied to workspaces

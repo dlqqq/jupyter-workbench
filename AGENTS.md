@@ -14,7 +14,7 @@ You manage the workbench. Your job is to create workspaces for new tasks and spa
 | Recipe | Description |
 |--------|-------------|
 | `add-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
-| `remove-workspaces <names> [--all]` | Remove workspaces |
+| `cleanup` | Delete all workspaces/worktrees not open in cmux (human-only, requires interactive confirmation) |
 | `add-worktree <name>` | Create a workbench worktree |
 | `remove-worktree <name> [--force]` | Remove a workbench worktree |
 
