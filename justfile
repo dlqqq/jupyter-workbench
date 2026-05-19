@@ -15,7 +15,7 @@ list-recipes:
 [arg("name", help="workspace name")]
 [arg("dev", long, help="comma-separated repos to dev-install")]
 [arg("with_pkgs", long="with", help="comma-separated PyPI packages to add")]
-workspace-add name dev="" with_pkgs="":
+add-workspace name dev="" with_pkgs="":
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
@@ -106,13 +106,13 @@ workspace-add name dev="" with_pkgs="":
 
     echo ""
     echo "✓ Workspace '$name' ready at: $ws"
-    echo "  cd $ws && just server-start"
+    echo "  cd $ws && just start-server"
 
 # Remove workspaces (comma-separated, or --all)
 [group('workbench')]
 [arg("names", help="comma-separated workspace names (ignored with --all)")]
 [arg("all", long, value="true")]
-workspace-remove names="" all="false":
+remove-workspaces names="" all="false":
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
@@ -131,7 +131,7 @@ workspace-remove names="" all="false":
         echo "✓ All workspaces removed"
     else
         if [[ -z "{{ names }}" ]]; then
-            echo "Usage: just workspace-remove <names> or just workspace-remove --all" >&2
+            echo "Usage: just remove-workspaces <names> or just remove-workspaces --all" >&2
             exit 1
         fi
         IFS=',' read -ra name_list <<< "{{ names }}"
@@ -157,7 +157,7 @@ workspace-remove names="" all="false":
 # Create a workbench worktree (for modifying workbench infrastructure)
 [group('workbench')]
 [arg("name", help="worktree/branch name")]
-worktree-add name:
+add-worktree name:
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
@@ -175,7 +175,7 @@ worktree-add name:
 [group('workbench')]
 [arg("name", help="worktree name")]
 [arg("force", long, value="true")]
-worktree-remove name force="false":
+remove-worktree name force="false":
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"

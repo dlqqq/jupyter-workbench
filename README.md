@@ -6,11 +6,11 @@ A lightweight Jupyter extension development orchestrator. Create parallel worksp
 
 ```bash
 # Create a workspace with specific packages for development
-just workspace-add my-feature --dev=jupyter-ai-acp-client,jupyter-ai-persona-manager
+just add-workspace my-feature --dev=jupyter-ai-acp-client,jupyter-ai-persona-manager
 
 # Start JupyterLab from the workspace
 cd workspaces/my-feature
-just server-start
+just start-server
 
 # Add another package later
 just add-dev jupyter-ai-router
@@ -39,10 +39,10 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 
 | Recipe | Description |
 |--------|-------------|
-| `workspace-add <name> [--dev=<repos>] [--with=<pkgs>]` | Create a new workspace |
-| `workspace-remove <names> [--all]` | Remove workspaces (comma-separated, or --all) |
-| `worktree-add <name>` | Create a workbench worktree (git branch) |
-| `worktree-remove <name> [--force]` | Remove a workbench worktree |
+| `add-workspace <name> [--dev=<repos>] [--with=<pkgs>]` | Create a new workspace |
+| `remove-workspaces <names> [--all]` | Remove workspaces (comma-separated, or --all) |
+| `add-worktree <name>` | Create a workbench worktree (git branch) |
+| `remove-worktree <name> [--force]` | Remove a workbench worktree |
 | `get-workbench-root` | Echo the workbench root path |
 
 ### Workspace recipes (`workspace.just` → `justfile`)
@@ -52,9 +52,9 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 | `add-dev <repos>` | Clone + editable install repos (comma-separated) |
 | `add <pkgs>` | Add PyPI packages (comma-separated) |
 | `sync` | Sync the venv (`uv sync`) |
-| `server-start` | Start JupyterLab in a new tab + open browser |
-| `server-stop` | Stop the JupyterLab server |
-| `server-restart` | Restart the JupyterLab server |
+| `start-server` | Start JupyterLab in a new tab + open browser |
+| `stop-server` | Stop the JupyterLab server |
+| `restart-server` | Restart the JupyterLab server |
 | `server-status` | Check if a server is running |
 | `workspace-status` | List dev-installed repos |
 | `enable-all-extensions` | Enable extensions for all dev repos |

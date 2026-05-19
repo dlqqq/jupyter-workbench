@@ -120,13 +120,13 @@ build-all:
 ################################################################################
 
 # Check if a server is running in this workspace
-[group('workspace-server')]
+[group('server')]
 server-status:
     @jq -r '.server.url // empty' "{{ ws_root }}/.workspace_info.json"
 
 # Start JupyterLab in a new tab and open browser to the right
-[group('workspace-server')]
-server-start *args:
+[group('server')]
+start-server *args:
     #!/usr/bin/env bash
     set -eo pipefail
     ws_root="{{ ws_root }}"
@@ -135,7 +135,7 @@ server-start *args:
     existing=$(jq -r '.server.url // empty' "$ws_root/.workspace_info.json")
     if [[ -n "$existing" ]]; then
         echo "Error: a Jupyter server is already running at $existing" >&2
-        echo "Use 'just server-restart' to restart it." >&2
+        echo "Use 'just restart-server' to restart it." >&2
         exit 1
     fi
 
@@ -187,8 +187,8 @@ server-start *args:
     echo "  PGID: $pgid"
 
 # Stop the JupyterLab server
-[group('workspace-server')]
-server-stop:
+[group('server')]
+stop-server:
     #!/usr/bin/env bash
     set -eo pipefail
     ws_root="{{ ws_root }}"
@@ -224,12 +224,12 @@ server-stop:
     echo "✓ Server force killed"
 
 # Restart the JupyterLab server
-[group('workspace-server')]
-server-restart:
-    just server-stop
-    just server-start
+[group('server')]
+restart-server:
+    just stop-server
+    just start-server
 
 # Print the browser surface ref in the current workspace
-[group('workspace-server')]
+[group('server')]
 get-browser-surface:
     @jq -r '.browser.surface_id // empty' "{{ ws_root }}/.workspace_info.json"
