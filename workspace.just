@@ -146,7 +146,7 @@ start-server *args:
     surface_json=$(cmux new-surface --workspace "${CMUX_WORKSPACE_ID}" --pane "$pane" --type terminal --focus false --json)
     server_surface=$(echo "$surface_json" | jq -r '.surface_ref')
 
-    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$server_surface" "cd $ws_root && uv run jupyter lab --no-browser --expose-app-in-browser --config=./jupyter_server_config.py {{ args }}\n"
+    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$server_surface" "cd $ws_root && CLAUDE_CODE_USE_BEDROCK=1 uv run jupyter lab --no-browser --expose-app-in-browser --config=./jupyter_server_config.py {{ args }}\n"
 
     # Wait for server to start
     echo "Waiting for server to start..."
@@ -195,6 +195,7 @@ stop-server:
 
     # Read server info
     server_pgid=$(jq -r '.server.pgid // empty' "$ws_root/.workspace_info.json")
+    server_surface=$(jq -r '.server.surface_id // empty' "$ws_root/.workspace_info.json")
 
     if [[ -z "$server_pgid" ]]; then
         echo "Error: no server is running in this workspace." >&2
@@ -208,6 +209,8 @@ stop-server:
     # Poll every 250ms for up to 3s
     for i in {1..12}; do
         if ! kill -0 -- -"$server_pgid" 2>/dev/null; then
+            # Close the server terminal surface
+            [[ -n "$server_surface" ]] && cmux close-surface --surface "$server_surface" 2>/dev/null || true
             jq '.server = null | .browser = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
                 && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
             echo "✓ Server stopped"
@@ -219,6 +222,8 @@ stop-server:
     # Force kill
     echo "Server didn't stop gracefully within 3s, force killing..."
     kill -9 -- -"$server_pgid" 2>/dev/null || true
+    # Close the server terminal surface
+    [[ -n "$server_surface" ]] && cmux close-surface --surface "$server_surface" 2>/dev/null || true
     jq '.server = null | .browser = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
         && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
     echo "✓ Server force killed"
