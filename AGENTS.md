@@ -51,7 +51,7 @@ Recipes are split across 3 justfiles using `set fallback`:
 | File | Location | Groups |
 |------|----------|--------|
 | `justfile` | Workbench root | `[workbench]` |
-| `workspace.just` → `justfile` | Workspace root | `[workspace]`, `[server]` |
+| `workspace.just` → `justfile` | Workspace root | `[workspace]`, `[workspace-server]` |
 | `repo.just` → `justfile` | Repo root | `[repo]` |
 
 Run `just list-recipes` to see all available recipes at your current level.

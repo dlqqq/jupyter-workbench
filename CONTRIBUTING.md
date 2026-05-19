@@ -9,7 +9,7 @@ Recipes are split across 3 justfiles, each scoped to its directory level:
 | File | Location | Groups |
 |------|----------|--------|
 | `justfile` | Workbench root | `[workbench]` |
-| `workspace.just` → copied as `justfile` | Workspace root | `[workspace]`, `[server]` |
+| `workspace.just` → copied as `justfile` | Workspace root | `[workspace]`, `[workspace-server]` |
 | `repo.just` → copied as `justfile` | Repo root | `[repo]` |
 
 ### Fallback

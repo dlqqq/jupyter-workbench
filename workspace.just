@@ -120,12 +120,12 @@ build-all:
 ################################################################################
 
 # Check if a server is running in this workspace
-[group('server')]
+[group('workspace-server')]
 server-status:
     @jq -r '.server.url // empty' "{{ ws_root }}/.workspace_info.json"
 
 # Start JupyterLab in a new tab and open browser to the right
-[group('server')]
+[group('workspace-server')]
 start-server *args:
     #!/usr/bin/env bash
     set -eo pipefail
@@ -187,7 +187,7 @@ start-server *args:
     echo "  PGID: $pgid"
 
 # Stop the JupyterLab server
-[group('server')]
+[group('workspace-server')]
 stop-server:
     #!/usr/bin/env bash
     set -eo pipefail
@@ -224,12 +224,12 @@ stop-server:
     echo "✓ Server force killed"
 
 # Restart the JupyterLab server
-[group('server')]
+[group('workspace-server')]
 restart-server:
     just stop-server
     just start-server
 
 # Print the browser surface ref in the current workspace
-[group('server')]
+[group('workspace-server')]
 get-browser-surface:
     @jq -r '.browser.surface_id // empty' "{{ ws_root }}/.workspace_info.json"
