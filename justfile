@@ -119,7 +119,7 @@ workspace-add *args:
     just sync
 
     echo ""
-    echo "✓ Worktree '$name' ready at: $ws"
+    echo "✓ Workspace '$name' ready at: $ws"
     echo "  cd $ws && just server-start"
 
 # Remove a workspace
