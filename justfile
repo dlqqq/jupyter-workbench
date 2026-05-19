@@ -168,7 +168,9 @@ add-worktree name:
     fi
     mkdir -p "$wb_root/worktrees"
     git worktree add -b "{{ name }}" "$wt"
+    cmux_ws=$(cmux new-workspace --name "[wb-wt] {{ name }}")
     echo "✓ Worktree '{{ name }}' ready at: $wt"
+    echo "✓ cmux workspace ready: $cmux_ws"
     echo "  cd $wt"
 
 # Remove a workbench worktree
