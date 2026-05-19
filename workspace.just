@@ -37,7 +37,7 @@ add-dev repos:
 
     IFS=',' read -ra repo_list <<< "{{ repos }}"
     for repo in "${repo_list[@]}"; do
-    url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$ws_root/repos.json")
+    url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$(just get-workbench-root)/repos.json")
     if [[ -z "$url" ]]; then
         echo "Error: '$repo' not found in repos.json" >&2
         exit 1
@@ -58,7 +58,7 @@ add-dev repos:
     pkg_parents=$(jq -r --arg r "$repo" '
         .[$r].packages // [{"parentDir": "."}]
         | .[].parentDir
-    ' "$ws_root/repos.json")
+    ' "$(just get-workbench-root)/repos.json")
 
     while IFS= read -r parent_dir; do
         uv add --editable --workspace "./$repo/$parent_dir"

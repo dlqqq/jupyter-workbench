@@ -72,7 +72,7 @@ enable-repo-server-extensions:
     pkg_names=$(jq -r --arg r "$repo_name" '
         .[$r].packages // [{"name": ($r | gsub("-";"_"))}]
         | .[].name
-    ' "$ws_root/repos.json")
+    ' "$(just get-workbench-root)/repos.json")
     while IFS= read -r pkg_name; do
         [[ -n "$pkg_name" ]] || continue
         echo "Enabling server extension: $pkg_name"
@@ -90,7 +90,7 @@ enable-repo-lab-extensions:
     pkg_parents=$(jq -r --arg r "$repo_name" '
         .[$r].packages // [{"parentDir": "."}]
         | .[].parentDir
-    ' "$ws_root/repos.json")
+    ' "$(just get-workbench-root)/repos.json")
     while IFS= read -r parent_dir; do
         [[ -n "$parent_dir" ]] || continue
         echo "Enabling lab extension in: $repo_name/$parent_dir"
