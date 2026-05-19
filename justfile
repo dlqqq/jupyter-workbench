@@ -104,7 +104,7 @@ add-workspace name dev="" with_pkgs="":
     # Sync
     just sync
 
-    cmux_ws=$(cmux new-workspace --name "[ws] $name")
+    cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws")
     echo ""
     echo "✓ Workspace '$name' ready at: $ws"
     echo "✓ cmux workspace ready: $cmux_ws"
@@ -170,7 +170,7 @@ add-worktree name:
     fi
     mkdir -p "$wb_root/worktrees"
     git worktree add -b "{{ name }}" "$wt"
-    cmux_ws=$(cmux new-workspace --name "[wb-wt] {{ name }}")
+    cmux_ws=$(cmux new-workspace --name "[wb-wt] {{ name }}" --cwd "$wt")
     echo "✓ Worktree '{{ name }}' ready at: $wt"
     echo "✓ cmux workspace ready: $cmux_ws"
     echo "  cd $wt"
