@@ -29,11 +29,12 @@ add-workspace name dev="" with_pkgs="":
     [[ -z "${dev_repos[0]}" ]] && dev_repos=()
     [[ -z "${with_pkgs[0]}" ]] && with_pkgs=()
 
-    # Validate dev repo names
+    # Validate dev repo names (strip #pr suffix for lookup)
     for repo in "${dev_repos[@]}"; do
-        url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$wb_root/repos.json")
+        repo_name="${repo%%#*}"
+        url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$wb_root/repos.json")
         if [[ -z "$url" ]]; then
-            echo "Error: '$repo' not found in repos.json" >&2
+            echo "Error: '$repo_name' not found in repos.json" >&2
             echo "Available repos: $(jq -r 'keys[]' "$wb_root/repos.json" | tr '\n' ' ')" >&2
             exit 1
         fi
@@ -57,9 +58,9 @@ add-workspace name dev="" with_pkgs="":
 
     cd "$ws"
 
-    # Write workspace info
+    # Write workspace info (use repo names without #pr suffix)
     if [[ ${#dev_repos[@]} -gt 0 ]]; then
-        repos_json=$(printf '%s\n' "${dev_repos[@]}" | jq -R . | jq -s .)
+        repos_json=$(printf '%s\n' "${dev_repos[@]}" | sed 's/#.*//' | jq -R . | jq -s .)
     else
         repos_json="[]"
     fi
@@ -71,22 +72,39 @@ add-workspace name dev="" with_pkgs="":
 
     # Clone and dev-install repos
     for repo in "${dev_repos[@]}"; do
-        url=$(jq -r --arg r "$repo" '.[$r].url' "$wb_root/repos.json")
-        echo "Cloning $repo..."
-        git clone "$url" "$repo"
+        repo_name="${repo%%#*}"
+        pr_number="${repo#*#}"
+        [[ "$pr_number" == "$repo" ]] && pr_number=""
+
+        url=$(jq -r --arg r "$repo_name" '.[$r].url' "$wb_root/repos.json")
+        echo "Cloning $repo_name..."
+        git clone "$url" "$repo_name"
+
+        # Checkout PR if specified
+        if [[ -n "$pr_number" ]]; then
+            echo "Checking out PR #$pr_number..."
+            (cd "$repo_name" && gh pr checkout "$pr_number")
+            # Add PR author's fork as a remote
+            pr_info=$(cd "$repo_name" && gh pr view "$pr_number" --json headRepositoryOwner,headRepository)
+            pr_author=$(echo "$pr_info" | jq -r '.headRepositoryOwner.login')
+            pr_repo_name=$(echo "$pr_info" | jq -r '.headRepository.name')
+            fork_url="git@github.com:$pr_author/$pr_repo_name.git"
+            (cd "$repo_name" && git remote add "$pr_author" "$fork_url" 2>/dev/null || true)
+            echo "Added remote '$pr_author' → $fork_url"
+        fi
 
         # Symlink repo justfile and exclude it from git
-        ln -sf "$wb_root/repo.just" "$repo/justfile"
-        grep -qxF 'justfile' "$repo/.git/info/exclude" 2>/dev/null || echo 'justfile' >> "$repo/.git/info/exclude"
+        ln -sf "$wb_root/repo.just" "$repo_name/justfile"
+        grep -qxF 'justfile' "$repo_name/.git/info/exclude" 2>/dev/null || echo 'justfile' >> "$repo_name/.git/info/exclude"
 
         # Get package parent dirs from repos.json (default: ".")
-        pkg_parents=$(jq -r --arg r "$repo" '
+        pkg_parents=$(jq -r --arg r "$repo_name" '
             .[$r].packages // [{"parentDir": "."}]
             | .[].parentDir
         ' "$wb_root/repos.json")
 
         while IFS= read -r parent_dir; do
-            uv add --editable --workspace "./$repo/$parent_dir"
+            uv add --editable --workspace "./$repo_name/$parent_dir"
         done <<< "$pkg_parents"
     done
 

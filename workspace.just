@@ -37,43 +37,60 @@ add-dev repos:
 
     IFS=',' read -ra repo_list <<< "{{ repos }}"
     for repo in "${repo_list[@]}"; do
-    url=$(jq -r --arg r "$repo" '.[$r].url // empty' "$(just get-workbench-root)/repos.json")
+    repo_name="${repo%%#*}"
+    pr_number="${repo#*#}"
+    [[ "$pr_number" == "$repo" ]] && pr_number=""
+
+    url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$(just get-workbench-root)/repos.json")
     if [[ -z "$url" ]]; then
-        echo "Error: '$repo' not found in repos.json" >&2
+        echo "Error: '$repo_name' not found in repos.json" >&2
         exit 1
     fi
-    if [[ -d "$repo" ]]; then
-        echo "Error: '$repo' already exists in this workspace" >&2
+    if [[ -d "$repo_name" ]]; then
+        echo "Error: '$repo_name' already exists in this workspace" >&2
         exit 1
     fi
 
     # Clone and add as editable workspace member
-    echo "Cloning $repo..."
-    git clone "$url" "$repo"
+    echo "Cloning $repo_name..."
+    git clone "$url" "$repo_name"
+
+    # Checkout PR if specified
+    if [[ -n "$pr_number" ]]; then
+        echo "Checking out PR #$pr_number..."
+        (cd "$repo_name" && gh pr checkout "$pr_number")
+        # Add PR author's fork as a remote
+        pr_info=$(cd "$repo_name" && gh pr view "$pr_number" --json headRepositoryOwner,headRepository)
+        pr_author=$(echo "$pr_info" | jq -r '.headRepositoryOwner.login')
+        pr_repo=$(echo "$pr_info" | jq -r '.headRepository.name')
+        fork_url="git@github.com:$pr_author/$pr_repo.git"
+        (cd "$repo_name" && git remote add "$pr_author" "$fork_url" 2>/dev/null || true)
+        echo "Added remote '$pr_author' → $fork_url"
+    fi
 
     # Symlink repo justfile and exclude from git
-    ln -sf "$wb_root/repo.just" "$repo/justfile"
-    grep -qxF 'justfile' "$repo/.git/info/exclude" 2>/dev/null || echo 'justfile' >> "$repo/.git/info/exclude"
+    ln -sf "$wb_root/repo.just" "$repo_name/justfile"
+    grep -qxF 'justfile' "$repo_name/.git/info/exclude" 2>/dev/null || echo 'justfile' >> "$repo_name/.git/info/exclude"
 
-    pkg_parents=$(jq -r --arg r "$repo" '
+    pkg_parents=$(jq -r --arg r "$repo_name" '
         .[$r].packages // [{"parentDir": "."}]
         | .[].parentDir
     ' "$(just get-workbench-root)/repos.json")
 
     while IFS= read -r parent_dir; do
-        uv add --editable --workspace "./$repo/$parent_dir"
+        uv add --editable --workspace "./$repo_name/$parent_dir"
     done <<< "$pkg_parents"
 
     # Update .workspace_info.json
-    jq --arg repo "$repo" '.["dev-repos"] += [$repo]' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
+    jq --arg repo "$repo_name" '.["dev-repos"] += [$repo]' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
         && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
 
     # Enable extensions
-    (cd "$repo"
+    (cd "$repo_name"
     just enable-repo-extensions)
 
     echo ""
-    echo "✓ Added: $repo"
+    echo "✓ Added: $repo_name"
     done
 
 # Alias for `uv sync`
