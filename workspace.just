@@ -272,7 +272,7 @@ close-workspace:
 server-status:
     @jq -r '.server.url // empty' "{{ ws_root }}/.workspace_info.json"
 
-# Start JupyterLab in a new tab and open browser to the right
+# Start JupyterLab in a new tab
 [group('workspace-server')]
 start-server *args:
     #!/usr/bin/env bash
@@ -321,17 +321,8 @@ start-server *args:
         "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
         && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
 
-    # Open browser with token
-    browser_json=$(cmux --json browser open "${url}lab?token=${token}" --workspace "${CMUX_WORKSPACE_ID}")
-    browser_surface=$(echo "$browser_json" | jq -r '.surface_ref')
-    jq --arg sid "$browser_surface" \
-        '.browser = {"surface_id": $sid}' \
-        "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
-        && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
-
     echo "✓ JupyterLab running at ${url}lab?token=${token}"
     echo "  Server surface: $server_surface"
-    echo "  Browser surface: $browser_surface"
     echo "  PGID: $pgid"
 
 # Stop the JupyterLab server
@@ -359,7 +350,7 @@ stop-server:
         if ! kill -0 -- -"$server_pgid" 2>/dev/null; then
             # Close the server terminal surface
             [[ -n "$server_surface" ]] && cmux close-surface --surface "$server_surface" 2>/dev/null || true
-            jq '.server = null | .browser = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
+            jq '.server = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
                 && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
             echo "✓ Server stopped"
             exit 0
@@ -372,7 +363,7 @@ stop-server:
     kill -9 -- -"$server_pgid" 2>/dev/null || true
     # Close the server terminal surface
     [[ -n "$server_surface" ]] && cmux close-surface --surface "$server_surface" 2>/dev/null || true
-    jq '.server = null | .browser = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
+    jq '.server = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
         && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
     echo "✓ Server force killed"
 
@@ -383,6 +374,150 @@ restart-server:
     just start-server
 
 # Print the browser surface ref in the current workspace
-[group('workspace-server')]
+[group('workspace-browser')]
 get-browser-surface:
     @jq -r '.browser.surface_id // empty' "{{ ws_root }}/.workspace_info.json"
+
+################################################################################
+# Browser recipes
+################################################################################
+
+# Open a browser to JupyterLab in the current workspace
+[group('workspace-browser')]
+open-browser:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
+
+    # Check if browser already open
+    existing=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
+    if [[ -n "$existing" ]]; then
+        echo "Error: A browser is already open. Use 'just refresh-browser' or 'just close-browser' first." >&2
+        exit 1
+    fi
+
+    # Require a running server
+    url=$(jq -r '.server.url // empty' "$ws_root/.workspace_info.json")
+    token=$(jq -r '.server.token // empty' "$ws_root/.workspace_info.json")
+    if [[ -z "$url" || -z "$token" ]]; then
+        echo "Error: no server is running. Use 'just start-server' first." >&2
+        exit 1
+    fi
+
+    # Open browser
+    browser_json=$(cmux --json browser open "${url}lab?token=${token}" --workspace "${CMUX_WORKSPACE_ID}")
+    browser_surface=$(echo "$browser_json" | jq -r '.surface_ref')
+    jq --arg sid "$browser_surface" '.browser = {"surface_id": $sid}' \
+        "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
+        && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
+
+    echo "✓ Browser opened: $browser_surface"
+
+# Reload the browser in the current workspace
+[group('workspace-browser')]
+refresh-browser:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
+    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
+    if [[ -z "$surface" ]]; then
+        echo "Error: no browser is open. Use 'just open-browser' first." >&2
+        exit 1
+    fi
+    cmux browser "$surface" reload
+    echo "✓ Browser reloaded"
+
+# Close the browser in the current workspace
+[group('workspace-browser')]
+close-browser:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
+    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
+    if [[ -z "$surface" ]]; then
+        echo "Error: no browser is open." >&2
+        exit 1
+    fi
+    cmux close-surface --surface "$surface"
+    jq '.browser = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
+        && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
+    echo "✓ Browser closed"
+
+################################################################################
+# Top-level aliases
+################################################################################
+
+# Start server and open browser
+[group('workspace')]
+start: start-server open-browser
+
+# Restart server and refresh browser
+[group('workspace')]
+restart: restart-server refresh-browser
+
+################################################################################
+# Chat recipes
+################################################################################
+
+# Open a new chat (side panel by default, --mainarea for main area)
+[group('workspace-chat')]
+open-chat *args:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
+    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
+    if [[ -z "$surface" ]]; then
+        echo "Error: no browser is open. Use 'just open-browser' first." >&2
+        exit 1
+    fi
+
+    chat_name="chat-$(date +%s)"
+    mainarea=false
+    for arg in {{ args }}; do
+        if [[ "$arg" == "--mainarea" ]]; then
+            mainarea=true
+        fi
+    done
+
+    if [[ "$mainarea" == "true" ]]; then
+        # Open a new launcher tab, then click the Chat card
+        cmux browser "$surface" eval "window.jupyterapp.commands.execute('launcher:create')"
+        sleep 1
+        cmux browser "$surface" click --text "Chat"
+        sleep 0.5
+        # Fill the chat name dialog and confirm
+        cmux browser "$surface" fill --ref "$(cmux browser "$surface" snapshot --interactive | grep -i 'name' | head -1 | awk '{print $1}')" "$chat_name"
+        cmux browser "$surface" click --text "Ok"
+    else
+        # Open/focus the Jupyter Chat side panel
+        cmux browser "$surface" eval "window.jupyterapp.commands.execute('jupyter-chat:open')"
+        sleep 1
+        # Click "+" to create a new chat
+        cmux browser "$surface" click --ref "$(cmux browser "$surface" snapshot --interactive | grep -E '^\S+.*button.*\+' | head -1 | awk '{print $1}')" 2>/dev/null \
+            || cmux browser "$surface" click --text "+"
+        sleep 0.5
+        # Fill the chat name dialog and confirm
+        cmux browser "$surface" fill --ref "$(cmux browser "$surface" snapshot --interactive | grep -i 'name' | head -1 | awk '{print $1}')" "$chat_name"
+        cmux browser "$surface" click --text "Ok"
+    fi
+
+    echo "✓ Chat opened: $chat_name"
+
+# Send a message to the currently active chat
+[group('workspace-chat')]
+[arg("message", help="message to send")]
+send-chat-message message:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
+    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
+    if [[ -z "$surface" ]]; then
+        echo "Error: no browser is open. Use 'just open-browser' first." >&2
+        exit 1
+    fi
+
+    # Find and fill the chat input, then send
+    cmux browser "$surface" click --role "combobox"
+    cmux browser "$surface" fill --role "combobox" "{{ message }}"
+    cmux browser "$surface" press --role "combobox" "Enter"
+    echo "✓ Message sent"
