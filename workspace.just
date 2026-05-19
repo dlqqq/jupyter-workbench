@@ -195,7 +195,7 @@ server-stop:
     fi
 
     # Kill the process group gracefully
-    echo "Stopping server (PGID $server_pgid): kill -TERM -- -$server_pgid"
+    echo "Stopping server..."
     kill -TERM -- -"$server_pgid" 2>/dev/null || true
 
     # Poll every 250ms for up to 3s
