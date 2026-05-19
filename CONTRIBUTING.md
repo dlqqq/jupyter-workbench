@@ -95,13 +95,21 @@ JSON file at the workspace root tracking dev-installed repos and runtime state.
 
 ## Files copied to workspaces
 
-`workspace-add` copies these from the workbench root into each new workspace:
+`workspace-add` copies from `workspaces/templates/` into each new workspace:
+- `pyproject.toml`
+- `jupyter_server_config.py`
+- `AGENTS.md`
+
+It also symlinks from the workbench root (changes reflected immediately):
 - `workspace.just` → `justfile`
-- `.kiro/skills/`
-- `.env` (if present)
+- `.kiro/skills/` → `.kiro/skills`
 - `repo.just` → `<repo>/justfile` (for each dev repo, also adds to `.git/info/exclude`)
 
-Workspaces use symlinks to the workbench root for justfiles and skills, so changes are reflected immediately — no sync step needed.
+## Workbench worktrees
+
+`worktree-add` creates a git worktree of `jupyter-workbench` itself for editing workbench infrastructure in parallel. The worktree is a full checkout on its own branch — no copying or symlinking needed.
+
+`worktree-remove` checks for uncommitted changes and unmerged commits before removing. Use `--force` to skip safety checks.
 
 ## Adding a new recipe
 

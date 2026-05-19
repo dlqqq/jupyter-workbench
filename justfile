@@ -47,7 +47,7 @@ workspace-add name dev="" with_pkgs="":
 
     # Create workspace directory
     mkdir -p "$ws"
-    cp "$wb_root/template/"* "$ws/"
+    cp "$wb_root/workspaces/templates/"* "$ws/"
 
     # Symlink workspace justfile and skills to workbench root
     ln -sf "$wb_root/workspace.just" "$ws/justfile"
@@ -153,3 +153,51 @@ workspace-remove names="" all="false":
     fi
 
 
+
+# Create a workbench worktree (for modifying workbench infrastructure)
+[group('workbench')]
+[arg("name", help="worktree/branch name")]
+worktree-add name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    wb_root="{{ justfile_directory() }}"
+    wt="$wb_root/worktrees/{{ name }}"
+    if [[ -d "$wt" ]]; then
+        echo "Error: worktree '{{ name }}' already exists" >&2
+        exit 1
+    fi
+    mkdir -p "$wb_root/worktrees"
+    git worktree add -b "{{ name }}" "$wt"
+    echo "✓ Worktree '{{ name }}' ready at: $wt"
+    echo "  cd $wt"
+
+# Remove a workbench worktree
+[group('workbench')]
+[arg("name", help="worktree name")]
+[arg("force", long, value="true")]
+worktree-remove name force="false":
+    #!/usr/bin/env bash
+    set -eo pipefail
+    wb_root="{{ justfile_directory() }}"
+    wt="$wb_root/worktrees/{{ name }}"
+    if [[ ! -d "$wt" ]]; then
+        echo "Error: worktree '{{ name }}' not found" >&2
+        exit 1
+    fi
+
+    if [[ "{{ force }}" != "true" ]]; then
+        # Check for uncommitted changes
+        if [[ -n "$(git -C "$wt" status --porcelain)" ]]; then
+            echo "Error: worktree '{{ name }}' has uncommitted changes. Use --force to override." >&2
+            exit 1
+        fi
+        # Check if branch is merged
+        if ! git merge-base --is-ancestor "{{ name }}" main; then
+            echo "Error: branch '{{ name }}' has unmerged commits. Push and merge first, or use --force." >&2
+            exit 1
+        fi
+    fi
+
+    git worktree remove "$wt" --force
+    git branch -D "{{ name }}" 2>/dev/null || true
+    echo "✓ Removed worktree '{{ name }}'"

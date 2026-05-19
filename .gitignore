@@ -1,4 +1,5 @@
-workspaces/
+workspaces/*
+!workspaces/templates/
 worktrees/
 .venv/
 node_modules/

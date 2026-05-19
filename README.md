@@ -41,6 +41,8 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 |--------|-------------|
 | `workspace-add <name> [--dev=<repos>] [--with=<pkgs>]` | Create a new workspace |
 | `workspace-remove <names> [--all]` | Remove workspaces (comma-separated, or --all) |
+| `worktree-add <name>` | Create a workbench worktree (git branch) |
+| `worktree-remove <name> [--force]` | Remove a workbench worktree |
 | `get-workbench-root` | Echo the workbench root path |
 
 ### Workspace recipes (`workspace.just` → `justfile`)
@@ -97,19 +99,23 @@ Each workspace contains a `.workspace_info.json` tracking dev repos and server s
 ```
 jupyter-workbench/              ← workbench root
 ├── justfile                    ← workbench recipes
-├── workspace.just               ← copied as justfile to workspaces
-├── repo.just                   ← copied as justfile to repos
+├── workspace.just              ← symlinked as justfile to workspaces
+├── repo.just                   ← symlinked as justfile to repos
 ├── repos.json                  ← repo registry
-├── pyproject.toml              ← base deps (jupyterlab)
-├── jupyter_server_config.py
-└── workspaces/
-    └── my-feature/             ← a workspace
-        ├── justfile            ← workspace.just copy
-        ├── .workspace_info.json
-        ├── .venv/
-        ├── pyproject.toml
-        ├── jupyter-ai-router/  ← cloned repo
-        │   └── justfile        ← repo.just copy
-        └── jupyter-chat/
-            └── justfile        ← repo.just copy
+├── workspaces/
+│   ├── templates/              ← files copied into new workspaces
+│   │   ├── AGENTS.md
+│   │   ├── pyproject.toml
+│   │   └── jupyter_server_config.py
+│   └── my-feature/            ← a workspace (plain directory)
+│       ├── justfile            ← symlink → workspace.just
+│       ├── .workspace_info.json
+│       ├── .venv/
+│       └── jupyter-ai-router/
+│           └── justfile        ← symlink → repo.just
+└── worktrees/
+    └── fix-recipes/            ← a workbench worktree (git branch)
+        ├── justfile            ← workbench justfile (from git)
+        ├── workspace.just
+        └── repo.just
 ```
