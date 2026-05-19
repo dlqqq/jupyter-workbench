@@ -204,10 +204,6 @@ spawn-agent:
     set -eo pipefail
     ws_root="{{ ws_root }}"
     prompt=$(jq -r '.prompt // empty' "$ws_root/.workspace_info.json")
-    if [[ -z "$prompt" ]]; then
-        echo "Error: no prompt found in .workspace_info.json" >&2
-        exit 1
-    fi
     exec kiro-cli chat --agent dlq -a "$prompt"
 
 ################################################################################
