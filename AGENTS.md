@@ -2,15 +2,15 @@
 
 ## About this project
 
-jupyter-workbench is a Jupyter extension development orchestrator. It manages parallel worktrees where developers edit specific packages while the rest install from PyPI.
+jupyter-workbench is a Jupyter extension development orchestrator. It manages parallel workspaces where developers edit specific packages while the rest install from PyPI.
 
-## For orchestrator agents (running outside a worktree)
+## For orchestrator agents (running outside a workspace)
 
-You manage the workbench. Your job is to create worktrees for new tasks and spawn agent sessions to work on them. Use the `spawn-agent` skill when the user gives you a GitHub issue to delegate. One worktree per task.
+You manage the workbench. Your job is to create workspaces for new tasks and spawn agent sessions to work on them. Use the `spawn-agent` skill when the user gives you a GitHub issue to delegate. One workspace per task.
 
-## For worker agents (running inside a worktree)
+## For worker agents (running inside a workspace)
 
-You are assigned to a task. Stay in your worktree. If you need another package, use `just add-dev`. If you need parallelism, use built-in subagent capabilities. Do NOT spawn new worktrees from within a worktree.
+You are assigned to a task. Stay in your workspace. If you need another package, use `just add-dev`. If you need parallelism, use built-in subagent capabilities. Do NOT spawn new workspaces from within a workspace.
 
 ### General workflow
 
@@ -37,14 +37,14 @@ You are assigned to a task. Stay in your worktree. If you need another package, 
    ```
 
 5. **Notify the user.**
-   - Done: `cmux notify --title "Done: <worktree>" --body "<brief summary>"`
-   - Stuck: `cmux notify --title "Stuck: <worktree>" --body "<what's blocking>"`
+   - Done: `cmux notify --title "Done: <workspace>" --body "<brief summary>"`
+   - Stuck: `cmux notify --title "Stuck: <workspace>" --body "<what's blocking>"`
 
 ### Sign-off steps (only when asked)
 
 When the user asks you to sign off or clean up:
 
-1. **Stop the server** — run `just server-stop` from the worktree root.
+1. **Stop the server** — run `just server-stop` from the workspace root.
 
 2. **Close extra surfaces** — close any surfaces created during the task (server terminal, browser):
    ```bash
@@ -60,20 +60,20 @@ Everything in the workbench uses `just`, a command runner. Recipes are split acr
 
 | File | Location | Groups | Examples |
 |------|----------|--------|---------|
-| `justfile` | Workbench root | `[workbench]` | `worktree-add`, `get-workbench-root` |
-| `worktree.just` → `justfile` | Worktree root | `[worktree]`, `[worktree-server]` | `add-dev`, `server-start`, `build-all`, `get-worktree-root` |
+| `justfile` | Workbench root | `[workbench]` | `workspace-add`, `get-workbench-root` |
+| `workspace.just` → `justfile` | Workspace root | `[workspace]`, `[workspace-server]` | `add-dev`, `server-start`, `build-all`, `get-workspace-root` |
 | `repo.just` → `justfile` | Repo root | `[repo]` | `build`, `lint`, `pytest`, `ensure-fork` |
 
-- **Fallback**: repo recipes can call worktree recipes, worktree recipes can call workbench recipes.
-- **Path resolution**: each justfile uses `{{ justfile_directory() }}` as its root. Call `just get-worktree-root` or `just get-workbench-root` from lower levels.
+- **Fallback**: repo recipes can call workspace recipes, workspace recipes can call workbench recipes.
+- **Path resolution**: each justfile uses `{{ justfile_directory() }}` as its root. Call `just get-workspace-root` or `just get-workbench-root` from lower levels.
 
 ### Usage examples
 
 ```bash
 # Workbench recipe (from workbench root)
-just worktree-add my-feature --dev jupyter-ai-router
+just workspace-add my-feature --dev jupyter-ai-router
 
-# Worktree recipe (from inside the worktree)
+# Workspace recipe (from inside the workspace)
 just server-start
 
 # Repo recipe (from inside a repo)
@@ -96,7 +96,7 @@ Run `just --list --unsorted` to see all available recipes (including fallback pa
 | Need to spawn a new agent session for an issue | `.kiro/skills/spawn-agent/SKILL.md` (workbench root only) |
 | Need to add a repo not listed in `repos.json` | `CONTRIBUTING.md` |
 | Need to add or modify a justfile recipe | `CONTRIBUTING.md` |
-| Need to understand workbench internals (justfile split, `.worktree_info.json`) | `CONTRIBUTING.md` |
+| Need to understand workbench internals (justfile split, `.workspace_info.json`) | `CONTRIBUTING.md` |
 
 ## Modifying recipes or workbench internals
 

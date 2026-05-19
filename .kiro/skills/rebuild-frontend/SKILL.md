@@ -31,7 +31,7 @@ cd <package>/ && just jlpm
 cd <package>/ && just build
 ```
 
-**All packages in the worktree:**
+**All packages in the workspace:**
 ```bash
 just build-all
 ```

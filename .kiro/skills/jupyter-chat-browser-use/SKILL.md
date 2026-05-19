@@ -9,7 +9,7 @@ Automate Jupyter Chat interactions through a cmux browser surface running Jupyte
 
 ## Prerequisites
 
-- A JupyterLab server running in the worktree (`just server-start` or `just server-start`)
+- A JupyterLab server running in the workspace (`just server-start` or `just server-start`)
 - A cmux browser surface open to JupyterLab
 - The `jupyter-chat` extension enabled
 
@@ -116,19 +116,19 @@ cmux browser $SURFACE press Escape
 Read the `.chat` file directly from disk (most reliable):
 
 ```bash
-cat <worktree>/<filename>.chat | jq '.messages[] | {sender: .sender, body: .body}'
+cat <workspace>/<filename>.chat | jq '.messages[] | {sender: .sender, body: .body}'
 ```
 
 Or get all message bodies:
 
 ```bash
-cat <worktree>/<filename>.chat | jq -r '.messages[].body'
+cat <workspace>/<filename>.chat | jq -r '.messages[].body'
 ```
 
 ### List Chat Files
 
 ```bash
-ls <worktree>/*.chat
+ls <workspace>/*.chat
 ```
 
 ### Read File Browser Contents
@@ -160,7 +160,7 @@ Note: This order may change if personas are added/removed. Always verify by read
 Some UI states aren't fully captured by DOM queries or the `.chat` file. Use screenshots to see what's happening.
 
 ```bash
-# Save a screenshot to the worktree
+# Save a screenshot to the workspace
 mkdir -p screenshots
 cmux browser $SURFACE screenshot --out screenshots/$(date +%s).png
 ```
@@ -238,5 +238,5 @@ cmux browser $SURFACE press Enter       # send
 
 # Read the response from disk
 sleep 3
-cat <worktree>/*.chat | jq -r '.messages[-1].body'
+cat <workspace>/*.chat | jq -r '.messages[-1].body'
 ```

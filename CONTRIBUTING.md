@@ -9,7 +9,7 @@ Recipes are split across 3 justfiles, each scoped to its directory level:
 | File | Location | Groups |
 |------|----------|--------|
 | `justfile` | Workbench root | `[workbench]` |
-| `worktree.just` → copied as `justfile` | Worktree root | `[worktree]`, `[worktree-server]` |
+| `workspace.just` → copied as `justfile` | Workspace root | `[workspace]`, `[workspace-server]` |
 | `repo.just` → copied as `justfile` | Repo root | `[repo]` |
 
 ### Fallback
@@ -17,29 +17,29 @@ Recipes are split across 3 justfiles, each scoped to its directory level:
 Lower-level justfiles use `set fallback` so recipes can call parent-level recipes:
 
 ```
-repo justfile → worktree justfile → workbench justfile
+repo justfile → workspace justfile → workbench justfile
 ```
 
-For example, a repo recipe can call `just get-worktree-root` — `just` walks up until it finds the worktree's justfile which defines that recipe.
+For example, a repo recipe can call `just get-workspace-root` — `just` walks up until it finds the workspace's justfile which defines that recipe.
 
 ### Path resolution
 
 Each justfile uses `{{ justfile_directory() }}` as its own root. To get a parent root:
 
 ```bash
-# From a repo recipe, get the worktree root:
-wt_root=$(just get-worktree-root)
+# From a repo recipe, get the workspace root:
+ws_root=$(just get-workspace-root)
 
-# From a worktree recipe, get the workbench root:
+# From a workspace recipe, get the workbench root:
 wb_root=$(just get-workbench-root)
 ```
 
-### Calling repo recipes from worktree recipes
+### Calling repo recipes from workspace recipes
 
 Use a subshell to `cd` into the repo:
 
 ```bash
-(cd "$wt_root/$repo" && just build)
+(cd "$ws_root/$repo" && just build)
 ```
 
 ## `repos.json`
@@ -69,9 +69,9 @@ For a repo with nested or differently-named packages:
 }
 ```
 
-## `.worktree_info.json`
+## `.workspace_info.json`
 
-JSON file at the worktree root tracking dev-installed repos and runtime state.
+JSON file at the workspace root tracking dev-installed repos and runtime state.
 
 ```json
 {
@@ -90,23 +90,23 @@ JSON file at the worktree root tracking dev-installed repos and runtime state.
 }
 ```
 
-- `dev-repos`: managed by `worktree-add` and `add-dev`
+- `dev-repos`: managed by `workspace-add` and `add-dev`
 - `server`/`browser`: managed by `just server-start` and `just server-stop` (null when server is not running)
 
-## Files copied to worktrees
+## Files copied to workspaces
 
-`worktree-add` copies these from the workbench root into each new worktree:
-- `worktree.just` → `justfile`
+`workspace-add` copies these from the workbench root into each new workspace:
+- `workspace.just` → `justfile`
 - `.kiro/skills/`
 - `.env` (if present)
 - `repo.just` → `<repo>/justfile` (for each dev repo, also adds to `.git/info/exclude`)
 
-Worktrees use symlinks to the workbench root for justfiles and skills, so changes are reflected immediately — no sync step needed.
+Workspaces use symlinks to the workbench root for justfiles and skills, so changes are reflected immediately — no sync step needed.
 
 ## Adding a new recipe
 
-1. Decide which justfile it belongs to (`justfile`, `worktree.just`, or `repo.just`)
+1. Decide which justfile it belongs to (`justfile`, `workspace.just`, or `repo.just`)
 2. Add the appropriate `[group('...')]` attribute
 3. Use `{{ justfile_directory() }}` for paths within the same level
-4. Call `just get-worktree-root` or `just get-workbench-root` for parent paths
-5. Use inline `jq` for reading/writing `.worktree_info.json`
+4. Call `just get-workspace-root` or `just get-workbench-root` for parent paths
+5. Use inline `jq` for reading/writing `.workspace_info.json`

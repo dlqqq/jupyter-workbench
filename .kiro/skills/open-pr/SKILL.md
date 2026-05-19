@@ -1,6 +1,6 @@
 ---
 name: open-pr
-description: Open a pull request from a repo in a worktree. Use when the user asks you to open a PR for your changes.
+description: Open a pull request from a repo in a workspace. Use when the user asks you to open a PR for your changes.
 ---
 
 # Open a Pull Request
@@ -53,7 +53,7 @@ cmux browser $SURFACE screenshot --out screenshots/after.png
 
 ### 5. Write PR.md preview
 
-Write a `PR.md` file in the worktree root with the full PR description. Include:
+Write a `PR.md` file in the workspace root with the full PR description. Include:
 - Title (first `# heading`)
 - Description of changes
 - Screenshots referenced as `![description](screenshots/filename.png)`

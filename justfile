@@ -10,9 +10,9 @@ get-workbench-root:
 list-recipes:
     @just --list --list-heading=""
 
-# Create a new worktree: just worktree-add <name> [--dev] <repos...> [--with <packages...>]
+# Create a new workspace: just workspace-add <name> [--dev] <repos...> [--with <packages...>]
 [group('workbench')]
-worktree-add *args:
+workspace-add *args:
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
@@ -39,7 +39,7 @@ worktree-add *args:
     done
 
     if [[ -z "$name" ]]; then
-        echo "Usage: just worktree-add <name> [--dev <repos...>] [--with <packages...>]" >&2
+        echo "Usage: just workspace-add <name> [--dev <repos...>] [--with <packages...>]" >&2
         exit 1
     fi
 
@@ -53,26 +53,25 @@ worktree-add *args:
         fi
     done
 
-    wt="$wb_root/worktrees/$name"
-    if [[ -d "$wt" ]]; then
-        echo "Error: worktree '$name' already exists at $wt" >&2
+    ws="$wb_root/workspaces/$name"
+    if [[ -d "$ws" ]]; then
+        echo "Error: workspace '$name' already exists at $ws" >&2
         exit 1
     fi
 
-    # Create worktree (detached)
-    mkdir -p "$wb_root/worktrees"
-    git worktree add --detach "$wt"
+    # Create workspace directory
+    mkdir -p "$ws"
+    cp "$wb_root/template/"* "$ws/"
 
-    # Symlink worktree justfile and skills to workbench root
-    ln -sf "$wb_root/worktree.just" "$wt/justfile"
-    rm -rf "$wt/.kiro/skills"
-    mkdir -p "$wt/.kiro"
-    ln -sf "$wb_root/.kiro/skills" "$wt/.kiro/skills"
-    [[ -f "$wb_root/.env" ]] && cp "$wb_root/.env" "$wt/.env"
+    # Symlink workspace justfile and skills to workbench root
+    ln -sf "$wb_root/workspace.just" "$ws/justfile"
+    mkdir -p "$ws/.kiro"
+    ln -sf "$wb_root/.kiro/skills" "$ws/.kiro/skills"
+    [[ -f "$wb_root/.env" ]] && cp "$wb_root/.env" "$ws/.env"
 
-    cd "$wt"
+    cd "$ws"
 
-    # Write worktree info
+    # Write workspace info
     if [[ ${#dev_repos[@]} -gt 0 ]]; then
         repos_json=$(printf '%s\n' "${dev_repos[@]}" | jq -R . | jq -s .)
     else
@@ -80,9 +79,9 @@ worktree-add *args:
     fi
     jq -n --argjson repos "$repos_json" \
         '{"dev-repos": $repos, "workspace_id": "", "server": null, "browser": null}' \
-        > "$wt/.worktree_info.json"
+        > "$ws/.workspace_info.json"
 
-    cd "$wt"
+    cd "$ws"
 
     # Clone and dev-install repos
     for repo in "${dev_repos[@]}"; do
@@ -120,38 +119,47 @@ worktree-add *args:
     just sync
 
     echo ""
-    echo "✓ Worktree '$name' ready at: $wt"
-    echo "  cd $wt && just server-start"
+    echo "✓ Worktree '$name' ready at: $ws"
+    echo "  cd $ws && just server-start"
 
-# Remove a worktree
+# Remove a workspace
 [group('workbench')]
-worktree-remove name:
+workspace-remove name:
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
-    wt="$wb_root/worktrees/{{ name }}"
-    if [[ ! -d "$wt" ]]; then
-        echo "Error: worktree '{{ name }}' not found" >&2
+    ws="$wb_root/workspaces/{{ name }}"
+    if [[ ! -d "$ws" ]]; then
+        echo "Error: workspace '{{ name }}' not found" >&2
         exit 1
     fi
-    cd "$wb_root"
-    git worktree remove "$wt" --force
-    echo "✓ Removed worktree '{{ name }}'"
+    # Stop server if running
+    pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
+    if [[ -n "$pgid" ]]; then
+        echo "Stopping server..."
+        kill -TERM -- -"$pgid" 2>/dev/null || true
+        sleep 1
+    fi
+    rm -rf "$ws"
+    echo "✓ Removed workspace '{{ name }}'"
 
-# Remove all worktrees and start fresh
+# Remove all workspaces and start fresh
 [group('workbench')]
-worktree-remove-all:
+workspace-remove-all:
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
-    cd "$wb_root"
-    for wt in worktrees/*/; do
-        [[ -d "$wt" ]] || continue
-        name=$(basename "$wt")
+    for ws in "$wb_root"/workspaces/*/; do
+        [[ -d "$ws" ]] || continue
+        name=$(basename "$ws")
+        # Stop server if running
+        pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
+        if [[ -n "$pgid" ]]; then
+            kill -TERM -- -"$pgid" 2>/dev/null || true
+        fi
         echo "Removing $name..."
-        git worktree remove "$wt" --force
     done
-    rm -rf worktrees
-    echo "✓ All worktrees removed"
+    rm -rf "$wb_root/workspaces"
+    echo "✓ All workspaces removed"
 
 

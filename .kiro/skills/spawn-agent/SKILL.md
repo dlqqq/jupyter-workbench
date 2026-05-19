@@ -1,11 +1,11 @@
 ---
 name: spawn-agent
-description: Spawn a new agent session in a dedicated worktree to work on a GitHub issue. Reads the issue, determines which packages to dev-install, creates a worktree, opens a cmux workspace, and launches a Kiro session with a plan. Use when the user says "spawn an agent for this issue", "work on this in parallel", or provides a GitHub issue URL they want delegated.
+description: Spawn a new agent session in a dedicated workspace to work on a GitHub issue. Reads the issue, determines which packages to dev-install, creates a workspace, opens a cmux workspace, and launches a Kiro session with a plan. Use when the user says "spawn an agent for this issue", "work on this in parallel", or provides a GitHub issue URL they want delegated.
 ---
 
 # Spawn Agent
 
-Orchestrate a new parallel agent session to work on a GitHub issue in an isolated worktree.
+Orchestrate a new parallel agent session to work on a GitHub issue in an isolated workspace.
 
 ## When to Use
 
@@ -38,7 +38,7 @@ Use intuition to assess whether the issue is simple or complex:
 
 The user can override: "just spawn it" or "let's plan this first."
 
-### Step 4: Name the worktree
+### Step 4: Name the workspace
 
 Use the pattern: `<package-abbreviation>-<short-slug>`
 
@@ -59,16 +59,16 @@ Package abbreviations:
 - `jupyter-server-mcp` → `mcp`
 - `jupyterlab-commands-toolkit` → `cmdtk`
 
-### Step 5: Create the worktree
+### Step 5: Create the workspace
 
 Run from the workbench root:
 ```bash
-just worktree-add <name> --dev <repos...> [--with <packages...>]
+just workspace-add <name> --dev <repos...> [--with <packages...>]
 ```
 
 ### Step 6: Write PLAN.md
 
-Write `PLAN.md` to the worktree root with:
+Write `PLAN.md` to the workspace root with:
 - Issue link and title
 - Issue body (or summary for long issues)
 - Which packages are dev-installed and why
@@ -79,20 +79,20 @@ Do NOT repeat general workflow info (build/restart/test/notify commands) — the
 ### Step 7: Create cmux workspace and launch agent
 
 ```bash
-# Create a new cmux workspace named after the worktree
-cmux new-workspace --name "<worktree-name>"
+# Create a new cmux workspace named after the workspace
+cmux new-workspace --name "<workspace-name>"
 
 # Get the workspace ref and surface ref
 cmux list-pane-surfaces --workspace <workspace-ref> --json
 
 # Build the prompt and send
-PROMPT="You are a worker agent assigned to the <worktree-name> worktree under the Jupyter Workbench. First, read AGENTS.md if it is not already in your context. It describes the available recipes, skills, and general workflow for working in a worktree. Then read PLAN.md for your specific task. Follow the worker agent workflow described in AGENTS.md. Notify the user once you are complete or get stuck."
+PROMPT="You are a worker agent assigned to the <workspace-name> workspace under the Jupyter Workbench. First, read AGENTS.md if it is not already in your context. It describes the available recipes, skills, and general workflow for working in a workspace. Then read PLAN.md for your specific task. Follow the worker agent workflow described in AGENTS.md. Notify the user once you are complete or get stuck."
 
-cmux send --workspace <workspace-ref> --surface <surface-ref> "cd <worktree-path> && kiro-cli chat --agent dlq -a '$PROMPT'\n"
+cmux send --workspace <workspace-ref> --surface <surface-ref> "cd <workspace-path> && kiro-cli chat --agent dlq -a '$PROMPT'\n"
 ```
 
 ## Notes
 
 - The spawned agent is a separate Kiro CLI session — it has its own context and conversation
-- The worktree is fully isolated — changes there don't affect other worktrees
+- The workspace is fully isolated — changes there don't affect other workspaces
 - TODO: Make the agent CLI configurable (support Codex, Claude Code, etc.)
