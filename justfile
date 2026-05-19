@@ -1,7 +1,6 @@
 set dotenv-load := true
 
 alias addws := add-workspace
-alias rmws := remove-workspaces
 alias addwt := add-worktree
 alias rmwt := remove-worktree
 alias list := list-recipes
@@ -91,76 +90,96 @@ add-workspace name dev="" with_pkgs="" spawn_agent="false" prompt="":
     echo "✓ Workspace '$name' created at: $ws"
     echo "✓ Setup running in cmux workspace: $cmux_ws"
 
-# Remove workspaces (comma-separated, or --all, or --except)
+# Delete all workspaces and worktrees not currently open in cmux
 [group('workbench')]
-[arg("names", help="comma-separated workspace names (ignored with --all)")]
-[arg("all", long, value="true")]
-[arg("except", long="except", short="x", help="remove all EXCEPT these comma-separated names")]
-remove-workspaces names="" all="false" except="":
+cleanup:
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
 
-    if [[ -n "{{ except }}" && -n "{{ names }}" ]]; then
-        echo "Error: --except cannot be used with a names list. Use --except alone to remove all except the listed items." >&2
-        exit 1
-    fi
-    if [[ -n "{{ except }}" && "{{ all }}" == "true" ]]; then
-        echo "Error: --except cannot be used with --all." >&2
-        exit 1
-    fi
-
-    # Build the list of workspaces to remove
-    targets=()
-    if [[ -n "{{ except }}" ]]; then
-        IFS=',' read -ra keep_list <<< "{{ except }}"
-        for ws in "$wb_root"/workspaces/*/; do
-            [[ -d "$ws" ]] || continue
-            name=$(basename "$ws")
-            [[ "$name" == "templates" ]] && continue
-            skip=false
-            for keep in "${keep_list[@]}"; do
-                [[ "$name" == "$keep" ]] && skip=true && break
-            done
-            [[ "$skip" == "false" ]] && targets+=("$name")
-        done
-    elif [[ "{{ all }}" == "true" ]]; then
-        for ws in "$wb_root"/workspaces/*/; do
-            [[ -d "$ws" ]] || continue
-            name=$(basename "$ws")
-            [[ "$name" == "templates" ]] && continue
-            targets+=("$name")
-        done
-    else
-        if [[ -z "{{ names }}" ]]; then
-            echo "Usage: just remove-workspaces <names> | --all | --except <names>" >&2
-            exit 1
+    # Get names of open cmux workspaces/worktrees
+    open_ws=()
+    open_wt=()
+    while IFS= read -r title; do
+        if [[ "$title" == "[ws] "* ]]; then
+            open_ws+=("${title#\[ws\] }")
+        elif [[ "$title" == "[wt] "* ]]; then
+            open_wt+=("${title#\[wt\] }")
         fi
-        IFS=',' read -ra targets <<< "{{ names }}"
-    fi
+    done < <(cmux list-workspaces --json | jq -r '.workspaces[].title')
 
-    for name in "${targets[@]}"; do
-        just _remove-workspace-one "$name"
+    # Find workspaces not open in cmux
+    ws_to_delete=()
+    for ws in "$wb_root"/workspaces/*/; do
+        [[ -d "$ws" ]] || continue
+        name=$(basename "$ws")
+        [[ "$name" == "templates" ]] && continue
+        found=false
+        for open in "${open_ws[@]}"; do
+            [[ "$name" == "$open" ]] && found=true && break
+        done
+        [[ "$found" == "false" ]] && ws_to_delete+=("$name")
     done
 
-[private]
-_remove-workspace-one name:
-    #!/usr/bin/env bash
-    set -eo pipefail
-    wb_root="{{ justfile_directory() }}"
-    ws="$wb_root/workspaces/{{ name }}"
-    if [[ ! -d "$ws" ]]; then
-        echo "Error: workspace '{{ name }}' not found" >&2
-        exit 1
-    fi
-    pgid=$(jq -r '.server.pgid // empty' "$ws/.workspace_info.json" 2>/dev/null)
-    if [[ -n "$pgid" ]]; then
-        kill -TERM -- -"$pgid" 2>/dev/null || true
-    fi
-    rm -rf "$ws"
-    echo "✓ Removed workspace '{{ name }}'"
+    # Find worktrees not open in cmux
+    wt_to_delete=()
+    for wt in "$wb_root"/worktrees/*/; do
+        [[ -d "$wt" ]] || continue
+        name=$(basename "$wt")
+        found=false
+        for open in "${open_wt[@]}"; do
+            [[ "$name" == "$open" ]] && found=true && break
+        done
+        [[ "$found" == "false" ]] && wt_to_delete+=("$name")
+    done
 
+    if [[ ${#ws_to_delete[@]} -eq 0 && ${#wt_to_delete[@]} -eq 0 ]]; then
+        echo "Nothing to clean up."
+        exit 0
+    fi
 
+    echo -e "\033[1;33mWARNING: This will delete all worktrees and workspaces not currently open in cmux.\033[0m"
+    echo ""
+
+    if [[ ${#wt_to_delete[@]} -gt 0 ]]; then
+        echo "Worktrees to delete:"
+        for name in "${wt_to_delete[@]}"; do
+            echo "├── $name"
+        done
+        echo ""
+    fi
+
+    if [[ ${#ws_to_delete[@]} -gt 0 ]]; then
+        echo "Workspaces to delete:"
+        for name in "${ws_to_delete[@]}"; do
+            echo "├── $name"
+        done
+        echo ""
+    fi
+
+    read -p "Continue? [y/N] " answer
+    if [[ ! "$answer" =~ ^[Yy] ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+
+    # Run deletion in a background terminal tab
+    pane=$(cmux identify --json | jq -r '.caller.pane_ref')
+    surface_json=$(cmux new-surface --workspace "${CMUX_WORKSPACE_ID}" --pane "$pane" --focus false --json)
+    surface=$(echo "$surface_json" | jq -r '.surface_ref')
+
+    # Build the deletion script
+    script="cd $wb_root"
+    for name in "${wt_to_delete[@]}"; do
+        script="$script && (git worktree remove '$wb_root/worktrees/$name' --force 2>/dev/null || rm -rf '$wb_root/worktrees/$name') && git branch -D '$name' 2>/dev/null; echo '✓ Removed worktree $name'"
+    done
+    for name in "${ws_to_delete[@]}"; do
+        script="$script && { pgid=\$(jq -r '.server.pgid // empty' '$wb_root/workspaces/$name/.workspace_info.json' 2>/dev/null); [[ -n \"\$pgid\" ]] && kill -TERM -- -\"\$pgid\" 2>/dev/null || true; rm -rf '$wb_root/workspaces/$name'; echo '✓ Removed workspace $name'; }"
+    done
+    script="$script && cmux close-surface --surface $surface"
+
+    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$surface" "$script\n"
+    echo "✓ Cleanup starting in background tab. Tab will close itself once complete."
 
 # Create a workbench worktree (for modifying workbench infrastructure)
 [group('workbench')]

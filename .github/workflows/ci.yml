@@ -62,42 +62,6 @@ jobs:
       - name: Verify removal
         run: test ! -d workspaces/ci-test
 
-  test-remove-workspaces-flags:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: extractions/setup-just@v2
-      - name: Setup test workspaces
-        run: |
-          for name in ws1 ws2 ws3; do
-            mkdir -p "workspaces/$name"
-            echo '{}' > "workspaces/$name/.workspace_info.json"
-          done
-      - name: "Test: remove by name"
-        run: |
-          just rmws ws1
-          test ! -d workspaces/ws1
-          test -d workspaces/ws2
-          test -d workspaces/ws3
-      - name: "Test: --except keeps listed, removes rest"
-        run: |
-          just rmws --except ws2
-          test -d workspaces/ws2
-          test ! -d workspaces/ws3
-      - name: "Test: --all removes all"
-        run: |
-          just rmws --all
-          test ! -d workspaces/ws2
-      - name: "Test: error when names + --except"
-        run: |
-          mkdir -p workspaces/ws1 && echo '{}' > workspaces/ws1/.workspace_info.json
-          output=$(just rmws ws1 --except ws1 2>&1 || true)
-          echo "$output" | grep -q "cannot be used with a names list"
-      - name: "Test: error when --all + --except"
-        run: |
-          output=$(just rmws --all --except ws1 2>&1 || true)
-          echo "$output" | grep -q "cannot be used with --all"
-
   test-remove-worktree-flags:
     runs-on: ubuntu-latest
     steps:

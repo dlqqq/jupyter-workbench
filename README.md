@@ -40,7 +40,7 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 | Recipe | Description |
 |--------|-------------|
 | `add-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
-| `remove-workspaces <names> [--all]` | Remove workspaces (comma-separated, or --all) |
+| `cleanup` | Delete all workspaces/worktrees not open in cmux |
 | `add-worktree <name>` | Create a workbench worktree (git branch) |
 | `remove-worktree <name> [--force]` | Remove a workbench worktree |
 | `get-workbench-root` | Echo the workbench root path |
@@ -56,6 +56,9 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 | `stop-server` | Stop the JupyterLab server |
 | `restart-server` | Restart the JupyterLab server |
 | `server-status` | Check if a server is running |
+| `spawn-agent` | Spawn an agent session from `.workspace_info.json` prompt |
+| `stop-agent` | Stop the agent session |
+| `close-workspace` | Stop agent + server, close cmux workspace |
 | `workspace-status` | List dev-installed repos |
 | `enable-all-extensions` | Enable extensions for all dev repos |
 | `build-all` | Build all dev repos |
