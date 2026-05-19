@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-justfiles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
+      - name: Parse all justfiles
+        run: |
+          just --list
+          just --list --justfile workspace.just
+          just --list --justfile repo.just
+
+  validate-repos-json:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JSON syntax
+        run: jq empty repos.json
+      - name: Check schema constraints
+        run: |
+          # Every entry must have a "url" string
+          jq -e 'to_entries | all(.value.url | type == "string")' repos.json
+          # If packages exist, each must have name and parentDir
+          jq -e '
+            to_entries | all(
+              .value.packages // [] | all(
+                has("name") and has("parentDir")
+              )
+            )
+          ' repos.json
+
+  test-workspace-lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
+      - uses: astral-sh/setup-uv@v4
+      - name: Create workspace (template only)
+        run: |
+          # Manually replicate the template-copy portion of add-workspace
+          # (the full recipe requires git clone + cmux which aren't available in CI)
+          mkdir -p workspaces/ci-test
+          cp workspaces/templates/* workspaces/ci-test/
+          ln -sf "$PWD/workspace.just" workspaces/ci-test/justfile
+      - name: Verify workspace files exist
+        run: |
+          test -f workspaces/ci-test/AGENTS.md
+          test -f workspaces/ci-test/jupyter_server_config.py
+          test -f workspaces/ci-test/pyproject.toml
+          test -L workspaces/ci-test/justfile
+          # Verify justfile symlink target is valid
+          just --list --justfile workspaces/ci-test/justfile
+      - name: Remove workspace
+        run: rm -rf workspaces/ci-test
+      - name: Verify removal
+        run: test ! -d workspaces/ci-test
