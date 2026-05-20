@@ -294,7 +294,7 @@ start-server *args:
     surface_json=$(cmux new-surface --workspace "${CMUX_WORKSPACE_ID}" --pane "$pane" --type terminal --focus false --json)
     server_surface=$(echo "$surface_json" | jq -r '.surface_ref')
 
-    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$server_surface" "cd $ws_root && CLAUDE_CODE_USE_BEDROCK=1 uv run jupyter lab --no-browser --expose-app-in-browser --config=./jupyter_server_config.py {{ args }}\n" > /dev/null
+    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$server_surface" "cd $ws_root && CLAUDE_CODE_USE_BEDROCK=1 uv run jupyter lab --no-browser --expose-app-in-browser --config=./jupyter_server_config.py {{ args }}\n"
 
     # Wait for server to start
     echo "Waiting for server to start..."
@@ -349,7 +349,7 @@ stop-server:
     for i in {1..12}; do
         if ! kill -0 -- -"$server_pgid" 2>/dev/null; then
             # Close the server terminal surface
-            [[ -n "$server_surface" ]] && cmux close-surface --surface "$server_surface" > /dev/null 2>/dev/null || true
+            [[ -n "$server_surface" ]] && cmux close-surface --surface "$server_surface" 2>/dev/null || true
             jq '.server = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
                 && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
             echo "✓ Server stopped"
@@ -362,7 +362,7 @@ stop-server:
     echo "Server didn't stop gracefully within 3s, force killing..."
     kill -9 -- -"$server_pgid" 2>/dev/null || true
     # Close the server terminal surface
-    [[ -n "$server_surface" ]] && cmux close-surface --surface "$server_surface" > /dev/null 2>/dev/null || true
+    [[ -n "$server_surface" ]] && cmux close-surface --surface "$server_surface" 2>/dev/null || true
     jq '.server = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
         && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
     echo "✓ Server force killed"
@@ -424,7 +424,7 @@ refresh-browser:
         echo "Error: no browser is open. Use 'just open-browser' first." >&2
         exit 1
     fi
-    cmux browser "$surface" reload > /dev/null
+    cmux browser "$surface" reload
     echo "✓ Browser reloaded"
 
 # Close the browser in the current workspace
@@ -438,7 +438,7 @@ close-browser:
         echo "Error: no browser is open." >&2
         exit 1
     fi
-    cmux close-surface --surface "$surface" > /dev/null
+    cmux close-surface --surface "$surface"
     jq '.browser = null' "$ws_root/.workspace_info.json" > "$ws_root/.workspace_info.json.tmp" \
         && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
     echo "✓ Browser closed"
