@@ -456,15 +456,27 @@ start: start-server open-browser
 restart: restart-server refresh-browser
 
 ################################################################################
-# Chat recipes
+# Jupyter Chat recipes
 ################################################################################
 
+# Check that jupyter-chat is installed in this workspace
+[private]
+_verify-jupyter-chat-installed:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    if ! uv pip list 2>/dev/null | grep -qi 'jupyterlab.chat\|jupyter.chat'; then
+        echo "Error: jupyter-chat is not installed in this workspace." >&2
+        echo "Run: just add-dev jupyter-chat" >&2
+        exit 1
+    fi
+
 # Open a new chat (side panel by default, --mainarea for main area)
-[group('workspace-chat')]
-open-chat *args:
+[group('workspace-jupyter-chat')]
+open-chat *args: _verify-jupyter-chat-installed
     #!/usr/bin/env bash
     set -eo pipefail
     ws_root="{{ ws_root }}"
+    wb_root=$(just get-workbench-root)
     surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
     if [[ -z "$surface" ]]; then
         echo "Error: no browser is open. Use 'just open-browser' first." >&2
@@ -480,33 +492,23 @@ open-chat *args:
     done
 
     if [[ "$mainarea" == "true" ]]; then
-        # Open a new launcher tab, then click the Chat card
-        cmux browser "$surface" eval "window.jupyterapp.commands.execute('launcher:create')"
-        sleep 1
-        cmux browser "$surface" click --text "Chat"
-        sleep 0.5
-        # Fill the chat name dialog and confirm
-        cmux browser "$surface" fill --ref "$(cmux browser "$surface" snapshot --interactive | grep -i 'name' | head -1 | awk '{print $1}')" "$chat_name"
-        cmux browser "$surface" click --text "Ok"
+        script=$(cat "$wb_root/workspaces/templates/scripts/open-chat-mainarea.js" | sed "s/__CHAT_NAME__/$chat_name/g")
     else
-        # Open/focus the Jupyter Chat side panel
-        cmux browser "$surface" eval "window.jupyterapp.commands.execute('jupyter-chat:open')"
-        sleep 1
-        # Click "+" to create a new chat
-        cmux browser "$surface" click --ref "$(cmux browser "$surface" snapshot --interactive | grep -E '^\S+.*button.*\+' | head -1 | awk '{print $1}')" 2>/dev/null \
-            || cmux browser "$surface" click --text "+"
-        sleep 0.5
-        # Fill the chat name dialog and confirm
-        cmux browser "$surface" fill --ref "$(cmux browser "$surface" snapshot --interactive | grep -i 'name' | head -1 | awk '{print $1}')" "$chat_name"
-        cmux browser "$surface" click --text "Ok"
+        script=$(cat "$wb_root/workspaces/templates/scripts/open-chat-sidepanel.js" | sed "s/__CHAT_NAME__/$chat_name/g")
+    fi
+
+    result=$(cmux browser "$surface" eval "$script")
+    if [[ "$result" == ERROR:* ]]; then
+        echo "$result" >&2
+        exit 1
     fi
 
     echo "✓ Chat opened: $chat_name"
 
 # Send a message to the currently active chat
-[group('workspace-chat')]
+[group('workspace-jupyter-chat')]
 [arg("message", help="message to send")]
-send-chat-message message:
+send-chat-message message: _verify-jupyter-chat-installed
     #!/usr/bin/env bash
     set -eo pipefail
     ws_root="{{ ws_root }}"
