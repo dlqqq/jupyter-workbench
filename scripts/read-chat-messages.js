@@ -1,21 +1,57 @@
 // Reads all messages from a chat by name, returning their HTML content.
 // Args: chatName
 (function(chatName) {
-  // Normalize: strip .chat extension if provided
   const name = chatName.replace(/\.chat$/, '');
-  const selector = `#jupyter-chat\\:\\:widget\\:\\:${CSS.escape(name + '.chat')}`;
-  const widget = document.querySelector(selector);
-  if (!widget) {
+
+  // Find the chat widget container:
+  // 1. Side panel: widget ID contains the chat name
+  // 2. Main area: find tab by title, then panel by data-id
+  let container = document.querySelector('#jupyter-chat\\:\\:widget\\:\\:' + CSS.escape(name + '.chat'));
+  if (!container) {
+    const tab = document.querySelector('li.lm-TabBar-tab[title*="' + name + '.chat"]');
+    if (tab && tab.dataset.id) {
+      container = document.getElementById(tab.dataset.id);
+    }
+  }
+  if (!container) {
     return 'ERROR: chat "' + chatName + '" not found in DOM';
   }
 
-  const messages = widget.querySelectorAll('.jp-chat-message');
+  const messages = container.querySelectorAll('.jp-chat-message');
   const result = [];
 
   for (const msg of messages) {
-    // Get rendered message content (text, math, etc.)
-    const rendered = msg.querySelector('.jp-chat-rendered-message');
-    const renderedHtml = rendered ? rendered.innerHTML.trim() : '';
+    // Get rendered message content as array of typed blocks
+    const rendered = msg.querySelector('.jp-chat-rendered-message .jp-RenderedMarkdown');
+    const content = [];
+    if (rendered) {
+      for (const child of rendered.children) {
+        if (child.tagName === 'PRE') {
+          const next = child.nextElementSibling;
+          const toolbar = next?.querySelector('.jp-chat-code-toolbar');
+          const msgContainer = child.closest('.jp-chat-message-container');
+          const idx = msgContainer?.dataset?.index;
+          const toolbarButtons = toolbar
+            ? [...toolbar.querySelectorAll('button')].map(b => {
+                const label = b.getAttribute('aria-label');
+                const sel = idx != null
+                  ? `[data-index="${idx}"] button[aria-label*="${label.split('(')[0].trim()}"]`
+                  : `button[aria-label*="${label.split('(')[0].trim()}"]`;
+                return sel;
+              })
+            : [];
+          content.push({ type: 'code', value: child.textContent, toolbarButtons });
+        } else if (child.classList.contains('jp-chat-code-toolbar')) {
+          continue; // skip toolbar
+        } else if (child.querySelector('mjx-container[display="true"]')) {
+          content.push({ type: 'math-block', value: child.textContent.trim() });
+        } else if (child.querySelector('mjx-container')) {
+          content.push({ type: 'math-inline', value: child.textContent.trim() });
+        } else if (child.textContent.trim()) {
+          content.push({ type: 'text', value: child.textContent.trim() });
+        }
+      }
+    }
 
     // Get tool call blocks if present
     const toolCalls = msg.querySelector('.jp-jupyter-ai-acp-client-tool-calls');
@@ -24,13 +60,13 @@
     // Get sender and time from header (ignore avatar)
     const header = msg.querySelector('.jp-chat-message-header');
     const headerBox = header?.querySelector('.MuiBox-root');
-    const sender = headerBox?.children[0]?.textContent?.trim() || '';
+    const sender = headerBox?.children[0]?.textContent?.trim() || 'self';
     const time = headerBox?.children[1]?.textContent?.trim() || '';
 
     result.push({
       sender,
       time,
-      content: renderedHtml,
+      content,
       toolCalls: toolCallsHtml
     });
   }
