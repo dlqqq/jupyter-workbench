@@ -63,7 +63,7 @@ Package abbreviations:
 
 Run from the workbench root:
 ```bash
-just add-workspace <name> --dev=<repos> [--with=<pkgs>] --spawn-agent --prompt="$PROMPT"
+just create-workspace <name> --dev=<repos> [--with=<pkgs>] --spawn-agent --prompt="$PROMPT"
 ```
 
 Where `$PROMPT` is:

@@ -6,7 +6,7 @@ A lightweight Jupyter extension development orchestrator. Create parallel worksp
 
 ```bash
 # Create a workspace with specific packages for development
-just add-workspace my-feature --dev=jupyter-ai-acp-client,jupyter-ai-persona-manager
+just create-workspace my-feature --dev=jupyter-ai-acp-client,jupyter-ai-persona-manager
 
 # Start JupyterLab from the workspace
 cd workspaces/my-feature
@@ -39,9 +39,9 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 
 | Recipe | Description |
 |--------|-------------|
-| `add-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
+| `create-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
 | `cleanup` | Delete all workspaces/worktrees not open in cmux |
-| `add-worktree <name>` | Create a workbench worktree (git branch) |
+| `create-worktree <name>` | Create a workbench worktree (git branch) |
 | `remove-worktree <name> [--force]` | Remove a workbench worktree |
 | `get-workbench-root` | Echo the workbench root path |
 

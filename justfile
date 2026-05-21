@@ -1,7 +1,7 @@
 set dotenv-load := true
 
-alias addws := add-workspace
-alias addwt := add-worktree
+alias crws := create-workspace
+alias crwt := create-worktree
 alias rmwt := remove-worktree
 alias list := list-recipes
 # Echo the workbench root directory
@@ -21,7 +21,7 @@ list-recipes:
 [arg("with_pkgs", long="with", help="comma-separated PyPI packages to add")]
 [arg("spawn_agent", long="spawn-agent", value="true")]
 [arg("prompt", long, help="agent prompt (requires --spawn-agent)")]
-add-workspace name dev="" with_pkgs="" spawn_agent="false" prompt="":
+create-workspace name dev="" with_pkgs="" spawn_agent="false" prompt="":
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
@@ -184,7 +184,7 @@ cleanup:
 # Create a workbench worktree (for modifying workbench infrastructure)
 [group('workbench')]
 [arg("name", help="worktree/branch name")]
-add-worktree name:
+create-worktree name:
     #!/usr/bin/env bash
     set -eo pipefail
     wb_root="{{ justfile_directory() }}"
