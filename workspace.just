@@ -550,3 +550,8 @@ send-chat-message message: _verify-jupyter-chat-installed
     cmux browser "$surface" fill --role "combobox" "{{ message }}"
     cmux browser "$surface" press --role "combobox" "Enter"
     echo "✓ Message sent"
+
+# List all chats visible in the Jupyter Chat panel
+[group('workspace-jupyter-chat')]
+list-chats: _verify-jupyter-chat-installed
+    @just browser-eval list-chats
