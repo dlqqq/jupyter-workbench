@@ -1,7 +1,8 @@
 workspaces/*
 !workspaces/templates/
 worktrees/
-tmp/
+tmp/*
+!tmp/.gitkeep
 .venv/
 node_modules/
 .env
