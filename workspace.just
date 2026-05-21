@@ -532,24 +532,13 @@ open-chat *args: _verify-jupyter-chat-installed
 
     echo "✓ Chat opened: $chat_name"
 
-# Send a message to the currently active chat
+# Send a message to a chat by name
 [group('workspace-jupyter-chat')]
-[arg("message", help="message to send")]
-send-chat-message message: _verify-jupyter-chat-installed
+send-chat-message chat_name message: _verify-jupyter-chat-installed
     #!/usr/bin/env bash
     set -eo pipefail
-    ws_root="{{ ws_root }}"
-    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
-    if [[ -z "$surface" ]]; then
-        echo "Error: no browser is open. Use 'just open-browser' first." >&2
-        exit 1
-    fi
-
-    # Find and fill the chat input, then send
-    cmux browser "$surface" click --role "combobox"
-    cmux browser "$surface" fill --role "combobox" "{{ message }}"
-    cmux browser "$surface" press --role "combobox" "Enter"
-    echo "✓ Message sent"
+    just browser-eval send-chat-message "{{ chat_name }}" "{{ message }}"
+    echo "✓ Message sent to {{ chat_name }}"
 
 # List all chats visible in the Jupyter Chat panel
 [group('workspace-jupyter-chat')]
