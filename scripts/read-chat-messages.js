@@ -21,11 +21,11 @@
     const toolCalls = msg.querySelector('.jp-jupyter-ai-acp-client-tool-calls');
     const toolCallsHtml = toolCalls ? toolCalls.outerHTML : '';
 
-    // Get message header (author, time)
+    // Get sender and time from header (ignore avatar)
     const header = msg.querySelector('.jp-chat-message-header');
-    const time = header?.querySelector('.jp-chat-message-time')?.getAttribute('title') || '';
-    const avatar = header?.querySelector('.MuiAvatar-root');
-    const sender = avatar?.getAttribute('title') || '';
+    const headerBox = header?.querySelector('.MuiBox-root');
+    const sender = headerBox?.children[0]?.textContent?.trim() || '';
+    const time = headerBox?.children[1]?.textContent?.trim() || '';
 
     result.push({
       sender,
