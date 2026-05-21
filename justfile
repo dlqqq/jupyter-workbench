@@ -169,7 +169,7 @@ cleanup:
     surface=$(echo "$surface_json" | jq -r '.surface_ref')
 
     # Build the deletion script
-    script="cd $wb_root"
+    script="cd $wb_root && rm -rf tmp"
     for name in "${wt_to_delete[@]}"; do
         script="$script && (git worktree remove '$wb_root/worktrees/$name' --force 2>/dev/null || rm -rf '$wb_root/worktrees/$name') && git branch -D '$name' 2>/dev/null; echo '✓ Removed worktree $name'"
     done

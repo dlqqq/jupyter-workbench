@@ -1,6 +1,7 @@
 workspaces/*
 !workspaces/templates/
 worktrees/
+tmp/
 .venv/
 node_modules/
 .env
