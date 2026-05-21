@@ -537,6 +537,10 @@ open-chat *args: _verify-jupyter-chat-installed
 send-chat-message chat_name message="": _verify-jupyter-chat-installed
     #!/usr/bin/env bash
     set -eo pipefail
+    if [[ -z "{{ chat_name }}" || -z "{{ message }}" ]]; then
+        echo "Usage: just send-chat-message <chat-name> <message>" >&2
+        exit 1
+    fi
     just browser-eval send-chat-message "{{ chat_name }}" "{{ message }}"
     echo "✓ Message sent to {{ chat_name }}"
 

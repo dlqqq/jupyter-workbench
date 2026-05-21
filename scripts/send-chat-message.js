@@ -1,9 +1,6 @@
 // Sends a message to a chat by name, typing character by character.
 // Args: chatName, message
 (async function(chatName, message) {
-  if (!chatName) return 'ERROR: chatName argument is required';
-  if (!message) return 'ERROR: message argument is required';
-
   const app = window.jupyterapp;
 
   // Open the chat (creates if needed, no-op if already open)

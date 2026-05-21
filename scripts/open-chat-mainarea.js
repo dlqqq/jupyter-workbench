@@ -1,7 +1,5 @@
 // Opens a new chat in the JupyterLab main area.
 (async function(chatName) {
-  if (!chatName) return 'ERROR: chatName argument is required';
-
   const app = window.jupyterapp;
 
   if (!app.commands.hasCommand('jupyterlab-chat:createAndOpen')) {
