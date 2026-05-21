@@ -4,16 +4,14 @@
 
   const app = window.jupyterapp;
 
-  if (!app.commands.hasCommand('jupyter-chat:open')) {
-    return 'ERROR: jupyter-chat commands not registered. Is the extension installed?';
+  if (!app.commands.hasCommand('jupyterlab-chat:createAndOpen')) {
+    return 'ERROR: jupyterlab-chat commands not registered. Is the extension installed?';
   }
 
-  await app.commands.execute('jupyter-chat:open');
+  await app.commands.execute('jupyterlab-chat:createAndOpen', {
+    name: chatName,
+    inSidePanel: true
+  });
 
-  if (!app.commands.hasCommand('jupyter-chat:create')) {
-    return 'ERROR: jupyter-chat:create command not found.';
-  }
-
-  await app.commands.execute('jupyter-chat:create', { name: chatName });
   return chatName;
 })
