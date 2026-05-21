@@ -96,14 +96,14 @@ JSON file at the workspace root tracking dev-installed repos and runtime state.
 }
 ```
 
-- `dev-repos`: object mapping repo names to options (optional `pr-number`). Managed by `add-workspace` and `add-dev`.
+- `dev-repos`: object mapping repo names to options (optional `pr-number`). Managed by `create-workspace` and `add-dev`.
 - `prompt`: optional agent prompt for `spawn-agent`
 - `agent`: managed by `spawn-agent` and `stop-agent` (null when agent is not running)
 - `server`/`browser`: managed by `just start-server` and `just stop-server` (null when server is not running)
 
 ## Files copied to workspaces
 
-`add-workspace` copies from `workspaces/templates/` into each new workspace:
+`create-workspace` copies from `workspaces/templates/` into each new workspace:
 - `pyproject.toml`
 - `jupyter_server_config.py`
 - `AGENTS.md`
@@ -115,7 +115,7 @@ It also symlinks from the workbench root (changes reflected immediately):
 
 ## Workbench worktrees
 
-`add-worktree` creates a git worktree of `jupyter-workbench` itself for editing workbench infrastructure in parallel. The worktree is a full checkout on its own branch — no copying or symlinking needed.
+`create-worktree` creates a git worktree of `jupyter-workbench` itself for editing workbench infrastructure in parallel. The worktree is a full checkout on its own branch — no copying or symlinking needed.
 
 `remove-worktree` checks for uncommitted changes and unmerged commits before removing. Use `--force` to skip safety checks.
 

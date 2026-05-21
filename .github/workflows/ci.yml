@@ -44,7 +44,7 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - name: Create workspace (template only)
         run: |
-          # Manually replicate the template-copy portion of add-workspace
+          # Manually replicate the template-copy portion of create-workspace
           # (the full recipe requires git clone + cmux which aren't available in CI)
           mkdir -p workspaces/ci-test
           cp workspaces/templates/* workspaces/ci-test/

@@ -13,9 +13,9 @@ You manage the workbench. Your job is to create workspaces for new tasks and spa
 
 | Recipe | Description |
 |--------|-------------|
-| `add-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
+| `create-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
 | `cleanup` | Delete all workspaces/worktrees not open in cmux (human-only, requires interactive confirmation) |
-| `add-worktree <name>` | Create a workbench worktree |
+| `create-worktree <name>` | Create a workbench worktree |
 | `remove-worktree <name> [--force]` | Remove a workbench worktree |
 
 ## Worktree worker (inside `worktrees/<name>/`)
@@ -27,7 +27,7 @@ You are editing workbench infrastructure (recipes, skills, docs, templates). You
 1. **Make your changes** — edit justfiles, skills, docs, templates, etc.
 2. **Test** — create a workspace to verify recipe changes work:
    ```bash
-   just add-workspace test --dev=<repo>
+   just create-workspace test --dev=<repo>
    cd workspaces/test
    # test your changes
    just remove-workspaces test
