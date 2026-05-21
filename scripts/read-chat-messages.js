@@ -24,8 +24,11 @@
     // Get message header (author, time)
     const header = msg.querySelector('.jp-chat-message-header');
     const time = header?.querySelector('.jp-chat-message-time')?.getAttribute('title') || '';
+    const avatar = header?.querySelector('.MuiAvatar-root');
+    const sender = avatar?.getAttribute('title') || '';
 
     result.push({
+      sender,
       time,
       content: renderedHtml,
       toolCalls: toolCallsHtml
