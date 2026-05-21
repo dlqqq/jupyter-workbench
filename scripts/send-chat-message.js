@@ -3,28 +3,42 @@
 (async function(chatName, message) {
   const app = window.jupyterapp;
 
-  // Open the chat (creates if needed, no-op if already open)
-  await app.commands.execute('jupyterlab-chat:createAndOpen', {
-    name: chatName,
-    inSidePanel: true
-  });
+  // Normalize: strip .chat extension if provided
+  const name = chatName.replace(/\.chat$/, '');
 
-  // Get the MultiChatPanel from the left sidebar
-  const panel = [...app.shell.widgets('left')]
-    .find(w => w.id === 'jupyter-chat::multi-chat-panel');
-  if (!panel || !panel.current) {
-    return 'ERROR: could not find chat panel';
+  // Search all shell areas for the chat widget
+  const areas = ['left', 'right', 'main'];
+  let input = null;
+
+  for (const area of areas) {
+    for (const widget of app.shell.widgets(area)) {
+      // Side panel: check current chat name
+      if (widget.current && widget.current.model) {
+        const modelName = widget.current.model.name.replace(/\.chat$/, '');
+        if (modelName === name) {
+          input = widget.current.model.input;
+          break;
+        }
+      }
+      // Main area: LabChatPanel by widget ID
+      if (widget.id === `jupyter-chat::widget::${name}`) {
+        input = widget.model.input;
+        break;
+      }
+    }
+    if (input) break;
   }
 
-  const input = panel.current.model.input;
-  await panel.current.model.ready;
+  if (!input) {
+    return 'ERROR: chat "' + chatName + '" not found in any area';
+  }
 
-  // Type character by character (~60 WPM ≈ 20ms per char)
+  // Type character by character (~60 WPM)
   input.value = '';
   input.cursorIndex = 0;
-  for (const char of message) {
-    input.value += char;
-    input.cursorIndex = input.value.length;
+  for (let i = 0; i < message.length; i++) {
+    input.value = message.slice(0, i + 1);
+    input.cursorIndex = i + 1;
     await new Promise(r => setTimeout(r, 20));
   }
 
