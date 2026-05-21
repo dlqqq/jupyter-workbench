@@ -2,6 +2,7 @@ set dotenv-load := true
 set fallback
 
 alias list := list-recipes
+alias restart := restart-server
 ws_root := justfile_directory()
 
 # Echo the workspace root directory
@@ -367,7 +368,7 @@ stop-server:
         && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
     echo "✓ Server force killed"
 
-# Restart the JupyterLab server
+# Restart server and navigate browser to new URL
 [group('workspace-server')]
 restart-server:
     #!/usr/bin/env bash
@@ -500,10 +501,6 @@ browser-eval script *args:
 # Start server and open browser
 [group('workspace')]
 start: start-server open-browser
-
-# Restart server and navigate browser to new URL
-[group('workspace')]
-restart: restart-server
 
 ################################################################################
 # Jupyter Chat recipes
