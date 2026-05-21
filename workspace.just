@@ -547,7 +547,22 @@ send-chat-message chat_name message="": _verify-jupyter-chat-installed
         echo "Usage: just send-chat-message <chat-name> <message>" >&2
         exit 1
     fi
-    just browser-eval send-chat-message "{{ chat_name }}" "\"{{ message }}\""
+    ws_root="{{ ws_root }}"
+    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
+    if [[ -z "$surface" ]]; then
+        echo "Error: no browser is open. Use 'just open-browser' first." >&2
+        exit 1
+    fi
+
+    # Build CSS selector for the chat widget (escape : and . for CSS)
+    chat_name="{{ chat_name }}"
+    chat_name_css="${chat_name//./.}"
+    selector="#jupyter-chat\\:\\:widget\\:\\:${chat_name_css}\\.chat"
+
+    # Click textarea to focus, type message, click send
+    cmux browser "$surface" click --selector "${selector} textarea"
+    cmux browser "$surface" type --selector "${selector} textarea" --text "{{ message }}"
+    cmux browser "$surface" click --selector "${selector} button[aria-label*='Send message' i]"
     echo "✓ Message sent to {{ chat_name }}"
 
 # List all chats visible in the Jupyter Chat panel
