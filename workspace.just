@@ -569,3 +569,8 @@ send-chat-message chat_name message="": _verify-jupyter-chat-installed
 [group('workspace-jupyter-chat')]
 list-chats: _verify-jupyter-chat-installed
     @just browser-eval list-chats
+
+# Read all messages from a chat by name (returns JSON)
+[group('workspace-jupyter-chat')]
+read-chat-messages chat_name: _verify-jupyter-chat-installed
+    @just browser-eval read-chat-messages "{{ chat_name }}" | python3 -m json.tool
