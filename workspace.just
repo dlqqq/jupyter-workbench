@@ -492,9 +492,19 @@ browser-eval script *args:
 [group('workspace')]
 start: start-server open-browser
 
-# Restart server and refresh browser
+# Restart server and navigate browser to new URL
 [group('workspace')]
-restart: restart-server refresh-browser
+restart:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
+    just restart-server
+    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
+    if [[ -n "$surface" ]]; then
+        url=$(jq -r '.server.url // empty' "$ws_root/.workspace_info.json")
+        token=$(jq -r '.server.token // empty' "$ws_root/.workspace_info.json")
+        cmux browser "$surface" goto "${url}lab?token=${token}"
+    fi
 
 ################################################################################
 # Jupyter Chat recipes
