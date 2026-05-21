@@ -54,8 +54,25 @@
     }
 
     // Get tool call blocks if present
-    const toolCalls = msg.querySelector('.jp-jupyter-ai-acp-client-tool-calls');
-    const toolCallsHtml = toolCalls ? toolCalls.outerHTML : '';
+    const toolCallsEl = msg.querySelector('.jp-jupyter-ai-acp-client-tool-calls');
+    const toolCalls = [];
+    if (toolCallsEl) {
+      for (const call of toolCallsEl.querySelectorAll('.jp-jupyter-ai-acp-client-tool-call')) {
+        toolCalls.push({
+          status: call.className.match(/tool-call-(\w+)/)?.[1] || 'unknown',
+          summary: call.querySelector('summary')?.textContent?.trim() || '',
+          files: [...call.querySelectorAll('.jp-jupyter-ai-acp-client-diff-header')].map(h => h.textContent),
+          lines: [...call.querySelectorAll('.jp-jupyter-ai-acp-client-diff-line-text')].map(l => l.textContent),
+          permissionButtons: [...call.querySelectorAll('.jp-jupyter-ai-acp-client-permission-btn')].map(b => {
+            const btnClass = [...b.classList].find(c => c.startsWith('jp-jupyter-ai-acp-client-permission-btn-'));
+            return {
+              label: b.textContent,
+              selector: `#${CSS.escape(container.id)} .${btnClass}:not([disabled])`
+            };
+          })
+        });
+      }
+    }
 
     // Get sender and time from header (ignore avatar)
     const header = msg.querySelector('.jp-chat-message-header');
@@ -67,7 +84,7 @@
       sender,
       time,
       content,
-      toolCalls: toolCallsHtml
+      toolCalls
     });
   }
 
