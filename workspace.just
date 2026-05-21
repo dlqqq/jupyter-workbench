@@ -443,6 +443,47 @@ close-browser:
         && mv "$ws_root/.workspace_info.json.tmp" "$ws_root/.workspace_info.json"
     echo "✓ Browser closed"
 
+# Run a JS script in the browser (scripts live in $wb_root/scripts/)
+[group('workspace-browser')]
+browser-eval script *args:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
+    wb_root=$(just get-workbench-root)
+    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
+    if [[ -z "$surface" ]]; then
+        echo "Error: no browser is open. Use 'just open-browser' first." >&2
+        exit 1
+    fi
+
+    script_path="$wb_root/scripts/{{ script }}.js"
+    if [[ ! -f "$script_path" ]]; then
+        echo "Error: script not found: $script_path" >&2
+        exit 1
+    fi
+
+    # JSON-encode each arg and build the argument list
+    encoded_args=""
+    for arg in {{ args }}; do
+        json_arg=$(printf '%s' "$arg" | jq -Rs .)
+        if [[ -n "$encoded_args" ]]; then
+            encoded_args="$encoded_args, $json_arg"
+        else
+            encoded_args="$json_arg"
+        fi
+    done
+
+    # Wrap: (function_expression)(arg1, arg2, ...)
+    fn=$(cat "$script_path")
+    wrapped="($fn)($encoded_args)"
+
+    result=$(cmux browser "$surface" eval "$wrapped")
+    if [[ "$result" == ERROR:* ]]; then
+        echo "$result" >&2
+        exit 1
+    fi
+    echo "$result"
+
 ################################################################################
 # Top-level aliases
 ################################################################################
@@ -475,14 +516,6 @@ _verify-jupyter-chat-installed:
 open-chat *args: _verify-jupyter-chat-installed
     #!/usr/bin/env bash
     set -eo pipefail
-    ws_root="{{ ws_root }}"
-    wb_root=$(just get-workbench-root)
-    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
-    if [[ -z "$surface" ]]; then
-        echo "Error: no browser is open. Use 'just open-browser' first." >&2
-        exit 1
-    fi
-
     chat_name="chat-$(date +%s)"
     mainarea=false
     for arg in {{ args }}; do
@@ -492,15 +525,9 @@ open-chat *args: _verify-jupyter-chat-installed
     done
 
     if [[ "$mainarea" == "true" ]]; then
-        script=$(cat "$wb_root/workspaces/templates/scripts/open-chat-mainarea.js" | sed "s/__CHAT_NAME__/$chat_name/g")
+        just browser-eval open-chat-mainarea "$chat_name"
     else
-        script=$(cat "$wb_root/workspaces/templates/scripts/open-chat-sidepanel.js" | sed "s/__CHAT_NAME__/$chat_name/g")
-    fi
-
-    result=$(cmux browser "$surface" eval "$script")
-    if [[ "$result" == ERROR:* ]]; then
-        echo "$result" >&2
-        exit 1
+        just browser-eval open-chat-sidepanel "$chat_name"
     fi
 
     echo "✓ Chat opened: $chat_name"
