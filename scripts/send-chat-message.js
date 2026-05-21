@@ -39,7 +39,7 @@
   for (let i = 0; i < message.length; i++) {
     input.value = message.slice(0, i + 1);
     input.cursorIndex = i + 1;
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 80));
   }
 
   // Send (same path as pressing Enter in the UI)
