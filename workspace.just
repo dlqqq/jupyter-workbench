@@ -370,8 +370,17 @@ stop-server:
 # Restart the JupyterLab server
 [group('workspace-server')]
 restart-server:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    ws_root="{{ ws_root }}"
     just stop-server
     just start-server
+    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
+    if [[ -n "$surface" ]]; then
+        url=$(jq -r '.server.url // empty' "$ws_root/.workspace_info.json")
+        token=$(jq -r '.server.token // empty' "$ws_root/.workspace_info.json")
+        cmux browser "$surface" goto "${url}lab?token=${token}"
+    fi
 
 # Print the browser surface ref in the current workspace
 [group('workspace-browser')]
@@ -494,17 +503,7 @@ start: start-server open-browser
 
 # Restart server and navigate browser to new URL
 [group('workspace')]
-restart:
-    #!/usr/bin/env bash
-    set -eo pipefail
-    ws_root="{{ ws_root }}"
-    just restart-server
-    surface=$(jq -r '.browser.surface_id // empty' "$ws_root/.workspace_info.json")
-    if [[ -n "$surface" ]]; then
-        url=$(jq -r '.server.url // empty' "$ws_root/.workspace_info.json")
-        token=$(jq -r '.server.token // empty' "$ws_root/.workspace_info.json")
-        cmux browser "$surface" goto "${url}lab?token=${token}"
-    fi
+restart: restart-server
 
 ################################################################################
 # Jupyter Chat recipes
