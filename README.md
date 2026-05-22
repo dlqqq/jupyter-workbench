@@ -49,21 +49,44 @@ Recipes are split across 3 justfiles using `set fallback` so lower levels can ca
 
 | Recipe | Description |
 |--------|-------------|
+| `start` | Start server and open browser |
 | `add-dev <repos>` | Clone + editable install repos (comma-separated) |
 | `add <pkgs>` | Add PyPI packages (comma-separated) |
 | `sync` | Sync the venv (`uv sync`) |
-| `start-server` | Start JupyterLab in a new tab + open browser |
-| `stop-server` | Stop the JupyterLab server |
-| `restart-server` | Restart the JupyterLab server |
-| `server-status` | Check if a server is running |
 | `spawn-agent` | Spawn an agent session from `.workspace_info.json` prompt |
 | `stop-agent` | Stop the agent session |
 | `close-workspace` | Stop agent + server, close cmux workspace |
 | `workspace-status` | List dev-installed repos |
 | `enable-all-extensions` | Enable extensions for all dev repos |
 | `build-all` | Build all dev repos |
-| `get-workspace-root` | Echo the workspace root path |
-| `setup-workspace` | Clone repos, install, enable extensions (runs automatically) |
+
+#### Server recipes (`[workspace-server]`)
+
+| Recipe | Description |
+|--------|-------------|
+| `start-server` | Start JupyterLab in a new tab |
+| `stop-server` | Stop the JupyterLab server |
+| `restart-server` | Restart server and navigate browser to new URL (alias: `restart`) |
+| `server-status` | Check if a server is running |
+
+#### Browser recipes (`[workspace-browser]`)
+
+| Recipe | Description |
+|--------|-------------|
+| `open-browser` | Open a browser to JupyterLab |
+| `close-browser` | Close the browser |
+| `refresh-browser` | Reload the browser |
+| `get-browser-surface` | Print the browser surface ref |
+| `browser-eval <script> [args...]` | Run a JS script in the browser |
+
+#### Jupyter Chat recipes (`[workspace-jupyter-chat]`)
+
+| Recipe | Description |
+|--------|-------------|
+| `open-chat [--mainarea]` | Open a new chat (side panel by default) |
+| `send-chat-message <name> <message>` | Send a message to a chat by name |
+| `read-chat-messages <name>` | Read all messages from a chat (JSON) |
+| `list-chats` | List all chats visible in the Chat panel |
 
 ### Repo recipes (`repo.just` → `justfile`)
 
@@ -106,6 +129,12 @@ jupyter-workbench/              ← workbench root
 ├── workspace.just              ← symlinked as justfile to workspaces
 ├── repo.just                   ← symlinked as justfile to repos
 ├── repos.json                  ← repo registry
+├── scripts/                    ← JS scripts for browser-eval
+│   ├── open-chat-sidepanel.js
+│   ├── open-chat-mainarea.js
+│   ├── list-chats.js
+│   └── read-chat-messages.js
+├── tmp/                        ← scratch space (gitignored contents)
 ├── workspaces/
 │   ├── templates/              ← files copied into new workspaces
 │   │   ├── AGENTS.md
