@@ -5,238 +5,144 @@ description: Interact with Jupyter Chat in a cmux browser surface. Use when you 
 
 # Jupyter Chat Browser Use
 
-Automate Jupyter Chat interactions through a cmux browser surface running JupyterLab.
+Automate Jupyter Chat interactions through workspace recipes and cmux browser commands.
 
 ## Prerequisites
 
-- A JupyterLab server running in the workspace (`just start-server` or `just start-server`)
-- A cmux browser surface open to JupyterLab
-- The `jupyter-chat` extension enabled
+- A JupyterLab server running (`just start-server`)
+- A browser open (`just open-browser`)
+- The `jupyter-chat` extension installed (`just add-dev jupyter-chat`)
 
-## Finding the Browser Surface
+## Recipes
+
+Use these `just` recipes for common chat operations:
 
 ```bash
-# Get the browser surface ref in the current workspace
+# List all chats
+just list-chats
+
+# Open a new chat (side panel by default)
+just open-chat
+just open-chat --mainarea
+
+# Send a message to a named chat
+just send-chat-message <chat-name> "<message>"
+
+# Read all messages from a chat (returns JSON)
+just read-chat-messages <chat-name>
+```
+
+## Browser Surface
+
+```bash
 SURFACE=$(just get-browser-surface)
 ```
 
-## Important: WKWebView Quirks
+## Sending Messages
 
-cmux uses WKWebView. Two commands are needed to interact with MUI components:
-- `type` inserts text but does NOT fire keyboard events
-- `press` fires keyboard events but does NOT insert text
-
-For components like MUI Autocomplete that need both (e.g., the `@` mention popup), use `type` followed by `press`.
-
-## Actions
-
-### Create a New Chat
+The `send-chat-message` recipe uses cmux browser commands to click the input, type, and click send:
 
 ```bash
-# Snapshot to find the launcher button
-cmux browser $SURFACE snapshot --interactive
-# Look for: button "Create a chat and open it" [ref=eN]
-
-# Click it
-cmux browser $SURFACE click <launcher-button-ref>
-
-# A dialog appears with a textbox and Ok/Cancel buttons
-# Snapshot again to get the dialog refs
-cmux browser $SURFACE snapshot --interactive
-# Look for: textbox "untitled" [ref=eN], button "Ok" [ref=eN]
-
-# Name the chat and confirm
-cmux browser $SURFACE fill <textbox-ref> "my-chat-name"
-cmux browser $SURFACE click <ok-ref>
+just send-chat-message chat-1779330823 "hello world"
 ```
 
-### Open the Chat Sidebar Panel
+Under the hood:
+1. Clicks the textarea: `#jupyter-chat\:\:widget\:\:<name>\.chat textarea`
+2. Types the message: `cmux browser $SURFACE type --selector "..." --text "..."`
+3. Clicks send: `button[aria-label*='Send message' i]`
 
-```bash
-cmux browser $SURFACE snapshot --interactive
-# Look for: tab "Jupyter Chat" [ref=eN]
-cmux browser $SURFACE click <jupyter-chat-tab-ref>
+## Reading Messages
+
+`just read-chat-messages <chat-name>` returns JSON with structured content:
+
+```json
+[
+  {
+    "sender": "self",
+    "time": "10:07 AM",
+    "content": [
+      { "type": "text", "value": "hello" },
+      { "type": "code", "value": "print('hi')\n", "toolbarButtons": ["...selector..."] },
+      { "type": "math-block", "value": "x+y=z" }
+    ],
+    "toolCalls": []
+  },
+  {
+    "sender": "Kiro",
+    "time": "10:07 AM",
+    "content": [],
+    "toolCalls": [
+      {
+        "status": "in_progress",
+        "summary": "• Creating hello.py",
+        "files": ["hello.py"],
+        "lines": ["+ print(\"hello\")"],
+        "permissionButtons": [
+          { "label": "Yes", "selector": "#... .jp-jupyter-ai-acp-client-permission-btn-allow-once:not([disabled])" },
+          { "label": "Always", "selector": "#... .jp-jupyter-ai-acp-client-permission-btn-allow-always:not([disabled])" },
+          { "label": "No", "selector": "#... .jp-jupyter-ai-acp-client-permission-btn-reject-once:not([disabled])" }
+        ]
+      }
+    ]
+  }
+]
 ```
 
-### Type a Message with @mention
+Content types: `text`, `code`, `math-inline`, `math-block`.
 
-The chat input selector is `.jp-chat-input-textfield textarea` (or find it via snapshot as a `combobox` element).
+## Approving Tool Calls
+
+Click the permission button selector from `read-chat-messages` output:
 
 ```bash
-# Get a snapshot ref for the chat input
-cmux browser $SURFACE snapshot --interactive --selector ".jp-chat-input-textfield"
-# Returns: combobox [ref=eN]
+cmux browser $SURFACE click --selector '<selector from permissionButtons>'
+```
 
-# Clear, focus, then type @ (need both type + press for autocomplete to trigger)
-cmux browser $SURFACE fill <ref> ""
-cmux browser $SURFACE click <ref>
-cmux browser $SURFACE type <ref> "@"
-cmux browser $SURFACE press "@"
+Or use the class directly:
 
-# Wait briefly for the autocomplete menu to appear, then read options:
+```bash
+cmux browser $SURFACE click --selector '.jp-jupyter-ai-acp-client-permission-btn-allow-once:not([disabled])'
+```
+
+## Browser Eval Scripts
+
+The `browser-eval` recipe runs JS scripts from `scripts/`:
+
+```bash
+just browser-eval <script-name> [args...]
+```
+
+Scripts are IIFEs that take string arguments. The recipe JSON-encodes args and checks for `ERROR:` prefix in the return value.
+
+Available scripts:
+- `open-chat-sidepanel` — opens a chat in the side panel
+- `open-chat-mainarea` — opens a chat in the main area
+- `list-chats` — lists chat files via the contents API
+- `read-chat-messages` — reads messages from the DOM
+
+## @Mentions
+
+To mention an AI persona, type `@` in the chat input. The autocomplete popup appears with available personas. Use arrow keys to select and Enter to confirm.
+
+```bash
+# Type @ to trigger autocomplete
+cmux browser $SURFACE type --selector "<textarea-selector>" "@"
+
+# Read available options
 cmux browser $SURFACE eval "
 const listbox = document.querySelector('.MuiAutocomplete-listbox');
 listbox ? [...listbox.children].map(o => o.textContent.trim()).join('\n') : 'no listbox';
 "
 
-# Navigate with arrow keys to select a persona
-cmux browser $SURFACE press ArrowDown   # repeat to reach desired persona
-cmux browser $SURFACE press Enter       # select it
-
-# Type the message
-cmux browser $SURFACE type <ref> "your message here"
-```
-
-### Send a Message
-
-```bash
+# Select with arrow keys + Enter
+cmux browser $SURFACE press ArrowDown
 cmux browser $SURFACE press Enter
 ```
 
-### List Available Personas (from UI)
+## Screenshots
 
-Trigger the `@` autocomplete and read the options:
-
-```bash
-cmux browser $SURFACE fill <ref> ""
-cmux browser $SURFACE click <ref>
-cmux browser $SURFACE type <ref> "@"
-cmux browser $SURFACE press "@"
-sleep 0.5
-cmux browser $SURFACE eval "
-const listbox = document.querySelector('.MuiAutocomplete-listbox');
-[...listbox.children].map(o => o.textContent.trim()).join('\n');
-"
-# Close the menu without selecting
-cmux browser $SURFACE press Escape
-```
-
-### Read Chat Messages
-
-Read the `.chat` file directly from disk (most reliable):
+Use screenshots when DOM queries aren't enough:
 
 ```bash
-cat <workspace>/<filename>.chat | jq '.messages[] | {sender: .sender, body: .body}'
-```
-
-Or get all message bodies:
-
-```bash
-cat <workspace>/<filename>.chat | jq -r '.messages[].body'
-```
-
-### List Chat Files
-
-```bash
-ls <workspace>/*.chat
-```
-
-### Read File Browser Contents
-
-The file browser items aren't exposed as interactive elements. Use eval:
-
-```bash
-cmux browser $SURFACE eval "document.querySelector('.jp-DirListing-content')?.innerText"
-```
-
-## Persona Name to Arrow Key Count
-
-Options are shown in alphabetical order. The first option is selected by default.
-
-| Persona | ArrowDown presses |
-|---------|-------------------|
-| Claude | 0 (selected by default) |
-| Codex | 1 |
-| Copilot | 2 |
-| Gemini | 3 |
-| Goose | 4 |
-| Kiro | 5 |
-| OpenCode | 6 |
-
-Note: This order may change if personas are added/removed. Always verify by reading the listbox options.
-
-## Vision: Screenshots
-
-Some UI states aren't fully captured by DOM queries or the `.chat` file. Use screenshots to see what's happening.
-
-```bash
-# Save a screenshot to the workspace
-mkdir -p screenshots
-cmux browser $SURFACE screenshot --out screenshots/$(date +%s).png
-```
-
-Then read the screenshot with the image read tool.
-
-### When to Use Screenshots
-
-- Check the current state of the chat when you don't understand what is going on
-- Check if the agent is still writing
-- Check for visual errors
-- Confirmation that an action worked
-
-## Approving Tool Calls
-
-Agents may request tool call approval (e.g., creating a file). This shows as a diff with Yes/Always/No buttons. These buttons are NOT visible in `snapshot --interactive` but can be found via CSS selectors.
-
-### Selectors
-
-| Action | Selector |
-|--------|----------|
-| Allow once | `.jp-jupyter-ai-acp-client-permission-btn-allow-once` |
-| Allow always | `.jp-jupyter-ai-acp-client-permission-btn-allow-always` |
-| Reject | `.jp-jupyter-ai-acp-client-permission-btn-reject-once` |
-
-### Approve a tool call
-
-```bash
-# Click "Yes" (allow once)
-cmux browser $SURFACE eval "document.querySelector('.jp-jupyter-ai-acp-client-permission-btn-allow-once')?.click()"
-
-# Click "Always" (allow always)
-cmux browser $SURFACE eval "document.querySelector('.jp-jupyter-ai-acp-client-permission-btn-allow-always')?.click()"
-
-# Click "No" (reject)
-cmux browser $SURFACE eval "document.querySelector('.jp-jupyter-ai-acp-client-permission-btn-reject-once')?.click()"
-```
-
-### Check if a tool call is pending
-
-```bash
-cmux browser $SURFACE eval "
-const btn = document.querySelector('.jp-jupyter-ai-acp-client-permission-btn');
-btn ? 'pending' : 'none';
-"
-```
-
-## Full Example: Send a Message to Kiro
-
-```bash
-SURFACE=$(just get-browser-surface)
-
-# Open chat sidebar and select a chat
-cmux browser $SURFACE snapshot --interactive
-cmux browser $SURFACE click <jupyter-chat-tab-ref>
-cmux browser $SURFACE click <chat-tab-ref>
-
-# Get input ref
-cmux browser $SURFACE snapshot --interactive --selector ".jp-chat-input-textfield"
-
-# Type @Kiro hello
-cmux browser $SURFACE fill <ref> ""
-cmux browser $SURFACE click <ref>
-cmux browser $SURFACE type <ref> "@"
-cmux browser $SURFACE press "@"
-sleep 0.5
-cmux browser $SURFACE press ArrowDown   # 5 times for Kiro
-cmux browser $SURFACE press ArrowDown
-cmux browser $SURFACE press ArrowDown
-cmux browser $SURFACE press ArrowDown
-cmux browser $SURFACE press ArrowDown
-cmux browser $SURFACE press Enter       # select Kiro
-cmux browser $SURFACE type <ref> "hello"
-cmux browser $SURFACE press Enter       # send
-
-# Read the response from disk
-sleep 3
-cat <workspace>/*.chat | jq -r '.messages[-1].body'
+cmux browser $SURFACE screenshot --out tmp/chat-state.png
 ```

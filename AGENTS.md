@@ -51,10 +51,14 @@ Recipes are split across 3 justfiles using `set fallback`:
 | File | Location | Groups |
 |------|----------|--------|
 | `justfile` | Workbench root | `[workbench]` |
-| `workspace.just` → `justfile` | Workspace root | `[workspace]`, `[workspace-server]` |
+| `workspace.just` → `justfile` | Workspace root | `[workspace]`, `[workspace-server]`, `[workspace-browser]`, `[workspace-jupyter-chat]` |
 | `repo.just` → `justfile` | Repo root | `[repo]` |
 
 Run `just list-recipes` to see all available recipes at your current level.
+
+## Browser Eval Scripts
+
+JS scripts in `scripts/` can be run via `just browser-eval <script-name> [args...]`. Scripts are function expressions that take string arguments. The recipe JSON-encodes args and checks for `ERROR:` prefix in the return value.
 
 ## Modifying recipes or workbench internals
 

@@ -113,6 +113,35 @@ It also symlinks from the workbench root (changes reflected immediately):
 - `.kiro/skills/` → `.kiro/skills`
 - `repo.just` → `<repo>/justfile` (for each dev repo, also adds to `.git/info/exclude`)
 
+## Browser Eval Scripts (`scripts/`)
+
+JS scripts for `just browser-eval` live in `scripts/` at the workbench root. Convention:
+
+1. Each script is a **function expression** (not an IIFE — no trailing `()`):
+   ```js
+   // scripts/my-script.js
+   (async function(arg1, arg2) {
+     // ...
+     return 'ok';
+   })
+   ```
+
+2. All arguments are strings (JSON-encoded by the recipe).
+
+3. Return `'ERROR: ...'` to signal failure — `browser-eval` checks for this prefix.
+
+4. Argument validation belongs in the **recipe**, not the script. Scripts may check runtime preconditions (e.g. extension not loaded).
+
+5. Scripts reference the workbench root via `just get-workbench-root`:
+   ```bash
+   wb_root=$(just get-workbench-root)
+   script_path="$wb_root/scripts/my-script.js"
+   ```
+
+## `tmp/` directory
+
+Scratch space for temporary clones, test files, etc. Contents are gitignored (except `.gitkeep`). Cleaned by `just cleanup`.
+
 ## Workbench worktrees
 
 `create-worktree` creates a git worktree of `jupyter-workbench` itself for editing workbench infrastructure in parallel. The worktree is a full checkout on its own branch — no copying or symlinking needed.

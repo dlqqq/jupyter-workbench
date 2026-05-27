@@ -1,9 +1,12 @@
 workspaces/*
 !workspaces/templates/
 worktrees/
+tmp/*
+!tmp/.gitkeep
 .venv/
 node_modules/
 .env
 *.egg-info/
 __pycache__/
 uv.lock
+**/PLAN.md
