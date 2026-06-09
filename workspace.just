@@ -574,3 +574,17 @@ list-chats: _verify-jupyter-chat-installed
 [group('workspace-jupyter-chat')]
 read-chat-messages chat_name: _verify-jupyter-chat-installed
     @just browser-eval read-chat-messages "{{ chat_name }}" | python3 -m json.tool
+
+################################################################################
+# Notebook recipes
+################################################################################
+
+# Open a notebook (or create new if no path given). Python kernel selected.
+[group("workspace-notebook")]
+open-notebook *path:
+    @just browser-eval open-notebook {{ path }}
+
+# Run all cells in a notebook. Path is required.
+[group("workspace-notebook")]
+run-notebook path:
+    @just browser-eval run-notebook {{ path }}
