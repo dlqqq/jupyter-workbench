@@ -1,46 +1,66 @@
 # Contributing
 
-How the workbench works internally. Read this before modifying justfiles or workbench infrastructure.
+How the workbench works internally. Read this before modifying recipes or workbench infrastructure.
 
-## Justfile Architecture
+## Single Justfile
 
-Recipes are split across 3 justfiles, each scoped to its directory level:
+All recipes live in one `justfile` at the repo root. Groups separate concerns:
 
-| File | Location | Groups |
-|------|----------|--------|
-| `justfile` | Workbench root | `[workbench]` |
-| `workspace.just` → copied as `justfile` | Workspace root | `[workspace]`, `[workspace-server]` |
-| `repo.just` → copied as `justfile` | Repo root | `[repo]` |
+- `[workbench]` — workspace lifecycle (create, cleanup, clone-all)
+- `[workspace]` — operations inside a workspace (dev, setup, agent, etc.)
+- `[workspace-server]` / `[workspace-browser]` — server and browser management
+- `[workspace-jupyter-chat]` / `[workspace-notebook]` — domain-specific helpers
 
-### Fallback
-
-Lower-level justfiles use `set fallback` so recipes can call parent-level recipes:
-
-```
-repo justfile → workspace justfile → workbench justfile
-```
-
-For example, a repo recipe can call `just get-workspace-root` — `just` walks up until it finds the workspace's justfile which defines that recipe.
+Since each workspace is a worktree of the same repo, the justfile is always available.
 
 ### Path resolution
 
-Each justfile uses `{{ justfile_directory() }}` as its own root. To get a parent root:
+A `root` variable is defined at the top:
 
-```bash
-# From a repo recipe, get the workspace root:
-ws_root=$(just get-workspace-root)
-
-# From a workspace recipe, get the workbench root:
-wb_root=$(just get-workbench-root)
+```just
+root := justfile_directory()
 ```
 
-### Calling repo recipes from workspace recipes
+All recipes use `$root` in bash (assigned as `root="{{ root }}"`).
 
-Use a subshell to `cd` into the repo:
+### Venv activation
+
+`spawn-agent` sources `.venv/bin/activate` before launching the agent. Agents can run `pytest`, `jlpm`, `mypy`, etc. directly.
+
+## Workspaces (= git worktrees)
+
+Each workspace is a git worktree. `create-workspace` runs:
 
 ```bash
-(cd "$ws_root/$repo" && just build)
+git worktree add -b "YYYYMMDD-<name>" "workspaces/<name>"
 ```
+
+Agents can edit both dev-installed packages AND workbench infrastructure from the same workspace, producing up to N+1 PRs.
+
+## Repo layout (repos/ / dev/ / tmp/)
+
+### Workbench root `repos/`
+
+Pre-cloned source repos shared across all workspaces. Populated by `just clone-all`. Never edited directly.
+
+### Workspace `repos/`
+
+Symlinks to workbench `repos/<name>`. Gives agents read-only access to all source code for context.
+
+### Workspace `dev/`
+
+Git worktrees created from the source repos. Each worktree gets its own branch (`YYYYMMDD-<ws-name>/<repo-name>`). These are editable and dev-installed via `uv add --editable`.
+
+### Workspace `tmp/`
+
+Git worktrees for reading specific branches. Created by `just checkout-repo <name> <branch>`. Not dev-installed.
+
+## Clean git state
+
+Workspace artifacts are gitignored via `.gitignore`:
+
+- `.workspace_info.json`, `.venv/`, `uv.lock`, `screenshots/`, `.env`
+- `repos/`, `dev/`, `tmp/`
 
 ## `repos.json`
 
@@ -50,108 +70,26 @@ Default conventions when `packages` is absent:
 - `name` = repo key with `-` replaced by `_`
 - `parentDir` = `.`
 
-### Adding a new repo
-
-For a standard single-package repo:
-
-```json
-"my-new-repo": { "url": "git@github.com:org/my-new-repo.git" }
-```
-
-For a repo with nested or differently-named packages:
-
-```json
-"my-repo": {
-  "url": "git@github.com:org/my-repo.git",
-  "packages": [
-    { "name": "my_package_name", "parentDir": "path/to/package" }
-  ]
-}
-```
-
 ## `.workspace_info.json`
 
-JSON file at the workspace root tracking dev-installed repos and runtime state.
+Tracks dev-installed repos and runtime state:
 
 ```json
 {
-  "dev-repos": {
-    "jupyter-ai-router": {},
-    "jupyter-chat": { "pr-number": 42 }
-  },
+  "dev-repos": { "jupyter-ai-router": {}, "jupyter-chat": { "pr-number": 42 } },
   "prompt": "",
-  "agent": {
-    "pgid": 12350
-  },
-  "server": {
-    "surface_id": "surface:19",
-    "url": "http://localhost:8888/",
-    "token": "abc123...",
-    "pid": 12345,
-    "pgid": 12340
-  },
-  "browser": {
-    "surface_id": "surface:22"
-  }
+  "agent": { "pgid": 12350 },
+  "server": { "surface_id": "...", "url": "...", "token": "...", "pid": 12345, "pgid": 12340 },
+  "browser": { "surface_id": "..." }
 }
 ```
 
-- `dev-repos`: object mapping repo names to options (optional `pr-number`). Managed by `create-workspace` and `add-dev`.
-- `prompt`: optional agent prompt for `spawn-agent`
-- `agent`: managed by `spawn-agent` and `stop-agent` (null when agent is not running)
-- `server`/`browser`: managed by `just start-server` and `just stop-server` (null when server is not running)
-
-## Files copied to workspaces
-
-`create-workspace` copies from `workspaces/templates/` into each new workspace:
-- `pyproject.toml`
-- `jupyter_server_config.py`
-- `AGENTS.md`
-
-It also symlinks from the workbench root (changes reflected immediately):
-- `workspace.just` → `justfile`
-- `.kiro/skills/` → `.kiro/skills`
-- `repo.just` → `<repo>/justfile` (for each dev repo, also adds to `.git/info/exclude`)
-
 ## Browser Eval Scripts (`scripts/`)
 
-JS scripts for `just browser-eval` live in `scripts/` at the workbench root. Convention:
-
-1. Each script is a **function expression** (not an IIFE — no trailing `()`):
-   ```js
-   // scripts/my-script.js
-   (async function(arg1, arg2) {
-     // ...
-     return 'ok';
-   })
-   ```
-
-2. All arguments are strings (JSON-encoded by the recipe).
-
-3. Return `'ERROR: ...'` to signal failure — `browser-eval` checks for this prefix.
-
-4. Argument validation belongs in the **recipe**, not the script. Scripts may check runtime preconditions (e.g. extension not loaded).
-
-5. Scripts reference the workbench root via `just get-workbench-root`:
-   ```bash
-   wb_root=$(just get-workbench-root)
-   script_path="$wb_root/scripts/my-script.js"
-   ```
-
-## `tmp/` directory
-
-Scratch space for temporary clones, test files, etc. Contents are gitignored (except `.gitkeep`). Cleaned by `just cleanup`.
-
-## Workbench worktrees
-
-`create-worktree` creates a git worktree of `jupyter-workbench` itself for editing workbench infrastructure in parallel. The worktree is a full checkout on its own branch — no copying or symlinking needed.
-
-`remove-worktree` checks for uncommitted changes and unmerged commits before removing. Use `--force` to skip safety checks.
+JS function expressions for `just browser-eval`. Return `'ERROR: ...'` to signal failure.
 
 ## Adding a new recipe
 
-1. Decide which justfile it belongs to (`justfile`, `workspace.just`, or `repo.just`)
-2. Add the appropriate `[group('...')]` attribute
-3. Use `{{ justfile_directory() }}` for paths within the same level
-4. Call `just get-workspace-root` or `just get-workbench-root` for parent paths
-5. Use inline `jq` for reading/writing `.workspace_info.json`
+1. Add the appropriate `[group('...')]` attribute
+2. Use `root="{{ root }}"` at the top of bash blocks
+3. Use inline `jq` for `.workspace_info.json`

@@ -1,0 +1,251 @@
+root := justfile_directory()
+
+# Dev-install repos (comma-separated: create worktree under dev/, editable install)
+[no-cd]
+add repos:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    cd "$root"
+
+    wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/repos"
+
+    IFS=',' read -ra repo_list <<< "{{ repos }}"
+    for repo in "${repo_list[@]}"; do
+    repo_name="${repo%%#*}"
+    pr_number="${repo#*#}"
+    [[ "$pr_number" == "$repo" ]] && pr_number=""
+
+    url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$root/repos.json")
+    if [[ -z "$url" ]]; then
+        echo "Error: '$repo_name' not found in repos.json" >&2
+        exit 1
+    fi
+    if [[ -d "dev/$repo_name" ]]; then
+        echo "Error: '$repo_name' already dev-installed" >&2
+        exit 1
+    fi
+
+    # Ensure source repo exists at workbench root
+    if [[ ! -d "$wb_repos/$repo_name" ]]; then
+        echo "Cloning $repo_name into workbench repos/..."
+        git clone "$url" "$wb_repos/$repo_name"
+    fi
+
+    # Create worktree under dev/
+    mkdir -p dev
+    ws_name=$(basename "$root")
+    branch="$(date +%Y%m%d)-$ws_name/$repo_name"
+    echo "Creating worktree: dev/$repo_name (branch: $branch)..."
+    git -C "$wb_repos/$repo_name" worktree add "$root/dev/$repo_name" -b "$branch"
+
+    # Checkout PR if specified
+    if [[ -n "$pr_number" ]]; then
+        echo "Checking out PR #$pr_number..."
+        (cd "dev/$repo_name" && gh pr checkout "$pr_number")
+        pr_info=$(cd "dev/$repo_name" && gh pr view "$pr_number" --json headRepositoryOwner,headRepository)
+        pr_author=$(echo "$pr_info" | jq -r '.headRepositoryOwner.login')
+        pr_repo=$(echo "$pr_info" | jq -r '.headRepository.name')
+        fork_url="git@github.com:$pr_author/$pr_repo.git"
+        (cd "dev/$repo_name" && git remote add "$pr_author" "$fork_url" 2>/dev/null || true)
+        echo "Added remote '$pr_author' → $fork_url"
+    fi
+
+    # Dev-install
+    pkg_parents=$(jq -r --arg r "$repo_name" '
+        .[$r].packages // [{"parentDir": "."}]
+        | .[].parentDir
+    ' "$root/repos.json")
+
+    while IFS= read -r parent_dir; do
+        uv add --editable --workspace "./dev/$repo_name/$parent_dir"
+    done <<< "$pkg_parents"
+
+    # Update .workspace_info.json
+    if [[ -n "$pr_number" ]]; then
+        jq --arg r "$repo_name" --argjson pr "$pr_number" '.["dev-repos"][$r] = {"pr-number": $pr}' \
+            "$root/.workspace_info.json" > "$root/.workspace_info.json.tmp"
+    else
+        jq --arg r "$repo_name" '.["dev-repos"][$r] = {}' \
+            "$root/.workspace_info.json" > "$root/.workspace_info.json.tmp"
+    fi
+    mv "$root/.workspace_info.json.tmp" "$root/.workspace_info.json"
+
+    # Enable extensions
+    just dev enable-extensions "$repo_name"
+
+    echo ""
+    echo "✓ Added: dev/$repo_name"
+    done
+
+# Remove a dev-installed repo (remove worktree)
+[no-cd]
+remove repo_name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    repo_name="{{ repo_name }}"
+
+    if [[ ! -d "$root/dev/$repo_name" ]]; then
+        echo "Error: '$repo_name' is not dev-installed" >&2
+        exit 1
+    fi
+
+    # Remove worktree
+    wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/repos"
+    git -C "$wb_repos/$repo_name" worktree remove "$root/dev/$repo_name" --force
+
+    # Remove from .workspace_info.json
+    jq --arg r "$repo_name" 'del(.["dev-repos"][$r])' \
+        "$root/.workspace_info.json" > "$root/.workspace_info.json.tmp" \
+        && mv "$root/.workspace_info.json.tmp" "$root/.workspace_info.json"
+
+    echo "✓ Removed: dev/$repo_name"
+
+# Enable extensions for a repo
+[no-cd]
+enable-extensions repo_name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    repo_name="{{ repo_name }}"
+
+    # Server extensions
+    pkg_names=$(jq -r --arg r "$repo_name" '
+        .[$r].packages // [{"name": ($r | gsub("-";"_"))}]
+        | .[].name
+    ' "$root/repos.json")
+    while IFS= read -r pkg_name; do
+        [[ -n "$pkg_name" ]] || continue
+        echo "Enabling server extension: $pkg_name"
+        jupyter server extension enable "$pkg_name"
+    done <<< "$pkg_names"
+
+    # Lab extensions
+    pkg_parents=$(jq -r --arg r "$repo_name" '
+        .[$r].packages // [{"parentDir": "."}]
+        | .[].parentDir
+    ' "$root/repos.json")
+    while IFS= read -r parent_dir; do
+        [[ -n "$parent_dir" ]] || continue
+        echo "Enabling lab extension in: dev/$repo_name/$parent_dir"
+        (cd "$root/dev/$repo_name/$parent_dir" && jupyter labextension develop . --overwrite) || true
+    done <<< "$pkg_parents"
+
+# Enable extensions for all dev-installed repos
+[no-cd]
+enable-all-extensions:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    repos=$(jq -r '.["dev-repos"] | keys[]' "$root/.workspace_info.json")
+    while IFS= read -r repo; do
+        [[ -n "$repo" ]] || continue
+        echo "=== $repo ==="
+        just dev enable-extensions "$repo"
+    done <<< "$repos"
+
+# Ensure a fork exists for a repo and add as remote
+[no-cd]
+ensure-fork repo_name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    cd "{{ root }}/dev/{{ repo_name }}"
+    if ! git remote get-url fork &>/dev/null; then
+        echo "Forking..."
+        gh repo fork --remote --remote-name fork
+        gh repo set-default "$(git remote get-url origin | sed 's|.*github.com[:/]||;s|\.git$||')"
+    else
+        echo "Fork remote already exists"
+    fi
+
+# Create worktrees and dev-install all repos from .workspace_info.json (used by setup-workspace)
+[no-cd]
+setup:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    cd "$root"
+
+    wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/repos"
+    ws_name=$(basename "$root")
+
+    while IFS= read -r repo_name; do
+        [[ -n "$repo_name" ]] || continue
+        pr_number=$(jq -r --arg r "$repo_name" '.["dev-repos"][$r]["pr-number"] // empty' "$root/.workspace_info.json")
+        url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$root/repos.json")
+        if [[ -z "$url" ]]; then
+            echo "Error: '$repo_name' not found in repos.json" >&2
+            exit 1
+        fi
+
+        # Ensure source repo exists
+        if [[ ! -d "$wb_repos/$repo_name" ]]; then
+            echo "Cloning $repo_name..."
+            git clone "$url" "$wb_repos/$repo_name"
+        fi
+
+        # Create worktree under dev/
+        mkdir -p dev
+        branch="$(date +%Y%m%d)-$ws_name/$repo_name"
+        echo "Creating worktree: dev/$repo_name (branch: $branch)..."
+        git -C "$wb_repos/$repo_name" worktree add "$root/dev/$repo_name" -b "$branch"
+
+        if [[ -n "$pr_number" ]]; then
+            echo "Checking out PR #$pr_number..."
+            (cd "dev/$repo_name" && gh pr checkout "$pr_number")
+            pr_info=$(cd "dev/$repo_name" && gh pr view "$pr_number" --json headRepositoryOwner,headRepository)
+            pr_author=$(echo "$pr_info" | jq -r '.headRepositoryOwner.login')
+            pr_repo=$(echo "$pr_info" | jq -r '.headRepository.name')
+            fork_url="git@github.com:$pr_author/$pr_repo.git"
+            (cd "dev/$repo_name" && git remote add "$pr_author" "$fork_url" 2>/dev/null || true)
+            echo "Added remote '$pr_author' → $fork_url"
+        fi
+
+        # Dev-install
+        pkg_parents=$(jq -r --arg r "$repo_name" '
+            .[$r].packages // [{"parentDir": "."}]
+            | .[].parentDir
+        ' "$root/repos.json")
+
+        while IFS= read -r parent_dir; do
+            uv add --editable --workspace "./dev/$repo_name/$parent_dir"
+        done <<< "$pkg_parents"
+
+        echo "✓ Ready: dev/$repo_name"
+    done < <(jq -r '.["dev-repos"] | keys[]' "$root/.workspace_info.json")
+
+    just dev enable-all-extensions
+
+# Check out a repo branch under tmp/ (for reading without modifying repos/)
+[no-cd]
+checkout repo_name branch="main":
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    repo_name="{{ repo_name }}"
+    branch="{{ branch }}"
+
+    wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/repos"
+    if [[ ! -d "$wb_repos/$repo_name" ]]; then
+        url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$root/repos.json")
+        if [[ -z "$url" ]]; then
+            echo "Error: '$repo_name' not found in repos.json" >&2
+            exit 1
+        fi
+        git clone "$url" "$wb_repos/$repo_name"
+    fi
+
+    mkdir -p tmp
+    dest="$root/tmp/$repo_name"
+    if [[ -d "$dest" ]]; then
+        echo "Switching $repo_name to $branch..."
+        git -C "$dest" checkout "$branch"
+    else
+        ws_name=$(basename "$root")
+        wt_branch="tmp-$ws_name/$repo_name"
+        git -C "$wb_repos/$repo_name" fetch --all --prune
+        git -C "$wb_repos/$repo_name" worktree add "$dest" "$branch" --detach 2>/dev/null \
+            || git -C "$wb_repos/$repo_name" worktree add "$dest" -b "$wt_branch" "$branch"
+    fi
+    echo "✓ tmp/$repo_name checked out at $branch"

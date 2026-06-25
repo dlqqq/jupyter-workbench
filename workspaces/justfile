@@ -1,0 +1,150 @@
+root := justfile_directory()
+
+# Create a new workspace
+[no-cd]
+[arg("name", help="workspace name")]
+[arg("dev", long, help="comma-separated repos to dev-install")]
+[arg("with_pkgs", long="with", help="comma-separated PyPI packages to add")]
+[arg("spawn_agent", long="spawn-agent", value="true")]
+[arg("prompt", long, help="agent prompt (requires --spawn-agent)")]
+create name dev="" with_pkgs="" spawn_agent="false" prompt="":
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    cd "$root"
+
+    name="{{ name }}"
+    IFS=',' read -ra dev_repos <<< "{{ dev }}"
+    IFS=',' read -ra with_pkgs <<< "{{ with_pkgs }}"
+
+    # Remove empty elements from empty defaults
+    [[ -z "${dev_repos[0]}" ]] && dev_repos=()
+    [[ -z "${with_pkgs[0]}" ]] && with_pkgs=()
+
+    # Validate dev repo names (strip #pr suffix for lookup)
+    for repo in "${dev_repos[@]}"; do
+        repo_name="${repo%%#*}"
+        url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$root/repos.json")
+        if [[ -z "$url" ]]; then
+            echo "Error: '$repo_name' not found in repos.json" >&2
+            echo "Available repos: $(jq -r 'keys[]' "$root/repos.json" | tr '\n' ' ')" >&2
+            exit 1
+        fi
+    done
+
+    ws="$root/workspaces/$name"
+    if [[ -d "$ws" ]]; then
+        echo "Error: workspace '$name' already exists at $ws" >&2
+        exit 1
+    fi
+
+    # Create workspace as a git worktree with a dated branch
+    branch="$(date +%Y%m%d)-$name"
+    git worktree add -b "$branch" "$ws"
+
+    # Symlink all repos into workspace repos/ for read-only context
+    mkdir -p "$ws/repos"
+    while IFS= read -r rname; do
+        if [[ -d "$root/repos/$rname" ]]; then
+            ln -sf "$root/repos/$rname" "$ws/repos/$rname"
+        fi
+    done < <(jq -r 'keys[]' "$root/repos.json")
+
+    # Write workspace info with dev-repos as object
+    repos_obj="{}"
+    for repo in "${dev_repos[@]}"; do
+        repo_name="${repo%%#*}"
+        pr_number="${repo#*#}"
+        [[ "$pr_number" == "$repo" ]] && pr_number=""
+        if [[ -n "$pr_number" ]]; then
+            repos_obj=$(echo "$repos_obj" | jq --arg r "$repo_name" --argjson pr "$pr_number" '.[$r] = {"pr-number": $pr}')
+        else
+            repos_obj=$(echo "$repos_obj" | jq --arg r "$repo_name" '.[$r] = {}')
+        fi
+    done
+    prompt="{{ prompt }}"
+    jq -n --argjson repos "$repos_obj" --arg prompt "$prompt" \
+        '{"dev-repos": $repos, "prompt": $prompt, "server": null, "browser": null}' \
+        > "$ws/.workspace_info.json"
+
+    # Copy .env if present
+    [[ -f "$root/.env" ]] && cp "$root/.env" "$ws/.env"
+
+    # Build command to run in the new workspace
+    if [[ "{{ spawn_agent }}" == "true" ]]; then
+        cmd="just setup-workspace && just spawn-agent"
+    else
+        cmd="just setup-workspace && cmux notify --title 'Setup done: $name' --body 'Ready'"
+    fi
+
+    cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$cmd")
+    echo "✓ Workspace '$name' created at: $ws"
+    echo "✓ Branch: $branch"
+    echo "✓ Setup running in cmux workspace: $cmux_ws"
+
+# Delete all workspaces not currently open in cmux
+[no-cd]
+cleanup:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+
+    # Get names of open cmux workspaces
+    open_ws=()
+    while IFS= read -r title; do
+        if [[ "$title" == "[ws] "* ]]; then
+            open_ws+=("${title#\[ws\] }")
+        fi
+    done < <(cmux list-workspaces --json | jq -r '.workspaces[].title')
+
+    # Find workspaces not open in cmux
+    ws_to_delete=()
+    for ws in "$root"/workspaces/*/; do
+        [[ -d "$ws" ]] || continue
+        name=$(basename "$ws")
+        [[ "$name" == "templates" ]] && continue
+        found=false
+        for open in "${open_ws[@]}"; do
+            [[ "$name" == "$open" ]] && found=true && break
+        done
+        [[ "$found" == "false" ]] && ws_to_delete+=("$name")
+    done
+
+    if [[ ${#ws_to_delete[@]} -eq 0 ]]; then
+        echo "Nothing to clean up."
+        exit 0
+    fi
+
+    echo -e "\033[1;33mWARNING: This will delete all workspaces not currently open in cmux.\033[0m"
+    echo ""
+    echo "Workspaces to delete:"
+    for name in "${ws_to_delete[@]}"; do
+        echo "├── $name"
+    done
+    echo ""
+
+    read -p "Continue? [y/N] " answer
+    if [[ ! "$answer" =~ ^[Yy] ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+
+    # Run deletion in a background terminal tab
+    pane=$(cmux identify --json | jq -r '.caller.pane_ref')
+    surface_json=$(cmux new-surface --workspace "${CMUX_WORKSPACE_ID}" --pane "$pane" --focus false --json)
+    surface=$(echo "$surface_json" | jq -r '.surface_ref')
+
+    # Build the deletion script
+    script="cd $root"
+    for name in "${ws_to_delete[@]}"; do
+        script="$script && { pgid=\$(jq -r '.server.pgid // empty' '$root/workspaces/$name/.workspace_info.json' 2>/dev/null); [[ -n \"\$pgid\" ]] && kill -TERM -- -\"\$pgid\" 2>/dev/null || true; }"
+        script="$script; for wt in '$root/workspaces/$name'/dev/*/; do [ -d \"\$wt\" ] && git -C \"\$wt\" worktree remove --force \"\$wt\" 2>/dev/null || true; done"
+        script="$script; for wt in '$root/workspaces/$name'/tmp/*/; do [ -d \"\$wt\" ] && git -C \"\$wt\" worktree remove --force \"\$wt\" 2>/dev/null || true; done"
+        script="$script && git worktree remove '$root/workspaces/$name' --force 2>/dev/null || rm -rf '$root/workspaces/$name'"
+        script="$script; branch=\$(git branch --list '*-$name' | head -1 | tr -d ' *'); [[ -n \"\$branch\" ]] && git branch -D \"\$branch\" 2>/dev/null || true"
+        script="$script; echo '✓ Removed workspace $name'"
+    done
+    script="$script && cmux close-surface --surface $surface"
+
+    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$surface" "$script\n"
+    echo "✓ Cleanup starting in background tab. Tab will close itself once complete."

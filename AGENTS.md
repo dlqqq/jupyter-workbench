@@ -1,9 +1,9 @@
 # Agents
 
-<!-- This AGENTS.md is for orchestrator agents and worktree worker agents.
+<!-- This AGENTS.md is for orchestrator agents working from the main workbench root.
      Workspace worker agents use the AGENTS.md in workspaces/templates/AGENTS.md instead. -->
 
-jupyter-workbench is a Jupyter extension development orchestrator. It manages parallel workspaces where developers edit specific packages while the rest install from PyPI. It also supports workbench worktrees for modifying the workbench itself in parallel.
+jupyter-workbench is a Jupyter extension development orchestrator. It manages parallel workspaces where developers edit specific packages while the rest install from PyPI. Each workspace is a git worktree of the workbench repo, so agents can also modify workbench infrastructure (recipes, scripts, templates) and open PRs for both the workbench and the dev-installed packages.
 
 ## Orchestrator (main workbench root)
 
@@ -13,52 +13,56 @@ You manage the workbench. Your job is to create workspaces for new tasks and spa
 
 | Recipe | Description |
 |--------|-------------|
+| `clone-all` | Pre-clone/fetch all repos (run once or to update) |
 | `create-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
-| `cleanup` | Delete all workspaces/worktrees not open in cmux (human-only, requires interactive confirmation) |
-| `create-worktree <name>` | Create a workbench worktree |
-| `remove-worktree <name> [--force]` | Remove a workbench worktree |
+| `cleanup` | Delete all workspaces not open in cmux (human-only, requires interactive confirmation) |
 
-## Worktree worker (inside `worktrees/<name>/`)
+## Workspace worker (inside `workspaces/<name>/`)
 
-You are editing workbench infrastructure (recipes, skills, docs, templates). Your worktree is a git branch of `jupyter-workbench` itself.
+You are working in a workspace. Your workspace is a git worktree on branch `YYYYMMDD-<name>`. You can:
+
+1. **Edit dev-installed packages** — make changes in `dev/<repo>` and open PRs to their upstream repositories.
+2. **Edit workbench infrastructure** — modify justfiles, scripts, skills, docs, or templates and open a PR to the workbench repo itself.
+
+Up to N+1 PRs from a single workspace (1 for the workbench, N for each dev-installed package).
+
+### Repo directories
+
+| Directory | Purpose |
+|-----------|---------|
+| `repos/` | Symlinks to source repos — read-only context, never edit |
+| `dev/` | Worktrees for editing — dev-installed, push PRs from here |
+| `tmp/` | Worktrees for reading specific branches |
 
 ### Workflow
 
-1. **Make your changes** — edit justfiles, skills, docs, templates, etc.
-2. **Test** — create a workspace to verify recipe changes work:
-   ```bash
-   just create-workspace test --dev=<repo>
-   cd workspaces/test
-   # test your changes
-   just remove-workspaces test
-   ```
-3. **Commit and push** your branch.
-4. **Open a PR** — `gh pr create`
-5. **Notify the user:**
-   - Done: `cmux notify --title "Done: <worktree>" --body "<brief summary>"`
-   - Stuck: `cmux notify --title "Stuck: <worktree>" --body "<what's blocking>"`
+See `workspaces/templates/AGENTS.md` for the full worker agent workflow.
 
 ### Rules
 
-- Do NOT modify the main workbench or other worktrees
-- Stay on your branch
-- Clean up test workspaces before opening a PR
+- Do NOT modify other workspaces or the main checkout
+- Do NOT edit files in `repos/` — they're shared symlinks
+- Stay on your branch for workbench changes
+- Workspace artifacts (`.venv/`, `repos/`, `dev/`, `tmp/`, `.workspace_info.json`) are gitignored
 
 ## Justfile Architecture
 
-Recipes are split across 3 justfiles using `set fallback`:
+All recipes live in a single `justfile` at the repo root, organized by `[group]`:
 
-| File | Location | Groups |
-|------|----------|--------|
-| `justfile` | Workbench root | `[workbench]` |
-| `workspace.just` → `justfile` | Workspace root | `[workspace]`, `[workspace-server]`, `[workspace-browser]`, `[workspace-jupyter-chat]` |
-| `repo.just` → `justfile` | Repo root | `[repo]` |
+| Group | Purpose |
+|-------|---------|
+| `workbench` | Workspace lifecycle |
+| `workspace` | Operations inside a workspace |
+| `workspace-server` | JupyterLab server management |
+| `workspace-browser` | Browser automation |
+| `workspace-jupyter-chat` | Jupyter Chat helpers |
+| `workspace-notebook` | Notebook automation |
 
-Run `just list-recipes` to see all available recipes at your current level.
+Run `just list-recipes` to see all available recipes.
 
 ## Browser Eval Scripts
 
-JS scripts in `scripts/` can be run via `just browser-eval <script-name> [args...]`. Scripts are function expressions that take string arguments. The recipe JSON-encodes args and checks for `ERROR:` prefix in the return value.
+JS scripts in `scripts/` can be run via `just browser-eval <script-name> [args...]`.
 
 ## Modifying recipes or workbench internals
 
