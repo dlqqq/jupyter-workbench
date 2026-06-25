@@ -4,6 +4,7 @@
 uv.lock
 screenshots/
 .env
+pyproject.toml
 
 # Repo directory contents (but track the justfile)
 repos/*

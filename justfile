@@ -7,6 +7,7 @@ mod dev
 mod ws 'workspaces'
 mod server
 mod browser
+mod workbench-tests
 
 alias list := list-recipes
 alias restart := server::restart

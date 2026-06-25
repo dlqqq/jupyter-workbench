@@ -42,6 +42,9 @@ create name dev="" with_pkgs="" spawn_agent="false" prompt="":
     branch="$(date +%Y%m%d)-$name"
     git worktree add -b "$branch" "$ws"
 
+    # Generate pyproject.toml with the workspace name as the venv/project name
+    sed "s/^name = .*/name = \"$name\"/" "$root/workspaces/templates/pyproject.toml" > "$ws/pyproject.toml"
+
     # Symlink all repos into workspace repos/ for read-only context
     mkdir -p "$ws/repos"
     while IFS= read -r rname; do
@@ -70,17 +73,19 @@ create name dev="" with_pkgs="" spawn_agent="false" prompt="":
     # Copy .env if present
     [[ -f "$root/.env" ]] && cp "$root/.env" "$ws/.env"
 
-    # Build command to run in the new workspace
-    if [[ "{{ spawn_agent }}" == "true" ]]; then
-        cmd="just setup-workspace && just spawn-agent"
-    else
-        cmd="just setup-workspace && cmux notify --title 'Setup done: $name' --body 'Ready'"
+    # Open in cmux if available
+    if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
+        if [[ "{{ spawn_agent }}" == "true" ]]; then
+            cmd="just setup-workspace && just spawn-agent"
+        else
+            cmd="just setup-workspace && cmux notify --title 'Setup done: $name' --body 'Ready'"
+        fi
+        cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$cmd")
+        echo "✓ Setup running in cmux workspace: $cmux_ws"
     fi
 
-    cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$cmd")
     echo "✓ Workspace '$name' created at: $ws"
     echo "✓ Branch: $branch"
-    echo "✓ Setup running in cmux workspace: $cmux_ws"
 
 # Delete all workspaces not currently open in cmux
 [no-cd]
