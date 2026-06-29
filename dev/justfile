@@ -72,13 +72,14 @@ remove repo_name:
     set -eo pipefail
     root="{{ root }}"
     repo_name="{{ repo_name }}"
+    cd "$root"
 
     if [[ ! -d "$root/dev/$repo_name" ]]; then
         echo "Error: '$repo_name' is not dev-installed" >&2
         exit 1
     fi
 
-    # Remove pyproject member(s) without syncing
+    # Remove dependency + source entries without syncing
     pkg_names=$(jq -r --arg r "$repo_name" '
         .[$r].packages // [{"name": ($r | gsub("-";"_"))}]
         | .[].name
@@ -88,7 +89,12 @@ remove repo_name:
         uv remove "$pkg_name" --no-sync 2>/dev/null || true
     done <<< "$pkg_names"
 
-    # Remove worktree
+    # Strip the workspace member path(s) for this repo from pyproject.toml
+    # (uv remove leaves [tool.uv.workspace] members; a dangling path breaks uv sync).
+    # Match "dev/<repo>" exactly or "dev/<repo>/..." (not "dev/<repo>-other").
+    sed -i.bak "\#\"dev/$repo_name[/\"]#d" pyproject.toml && rm -f pyproject.toml.bak
+
+    # Remove the worktree
     wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/repos"
     git -C "$wb_repos/$repo_name" worktree remove "$root/dev/$repo_name" --force
 
