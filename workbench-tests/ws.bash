@@ -58,6 +58,11 @@ teardown() { wb_teardown; }
     [ "$name" = "$TEST_WS_NAME" ]
 }
 
+@test "ws create initializes an empty (activatable) venv" {
+    just ws create "$TEST_WS_NAME"
+    [ -f "$TEST_WS/.venv/bin/activate" ]
+}
+
 @test "ws create leaves no uncommitted/dirty git changes in the workspace" {
     just ws create "$TEST_WS_NAME"
     dirty=$(git -C "$TEST_WS" status --porcelain)

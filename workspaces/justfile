@@ -25,6 +25,10 @@ create name then_cmd="":
     # Generate pyproject.toml with the workspace name as the venv/project name
     sed "s/^name = .*/name = \"$name\"/" "$root/workspaces/templates/pyproject.toml" > "$ws/pyproject.toml"
 
+    # Create an empty venv so the workspace is immediately activatable
+    # (`dev setup`'s `uv sync` later reuses it). Fast: no packages installed.
+    (cd "$ws" && uv venv >/dev/null)
+
     # Symlink all repos into workspace repos/ for read-only context
     mkdir -p "$ws/repos"
     while IFS= read -r rname; do
