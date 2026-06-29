@@ -78,3 +78,23 @@ teardown() { wb_teardown; }
     [[ "$output" == *"cd workspaces/$TEST_WS_NAME"* ]]
     [[ "$output" == *"just dev add jupyter-ai-router"* ]]
 }
+
+@test "ws rm removes the workspace directory immediately" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    run just ws rm "$TEST_WS_NAME"
+    [ "$status" -eq 0 ]
+    [ ! -d "$TEST_WS" ]
+}
+
+@test "ws rm deletes the workspace branch" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    just ws rm "$TEST_WS_NAME"
+    run git -C "$WB_ROOT" show-ref --verify --quiet "refs/heads/$(date +%Y%m%d)-$TEST_WS_NAME"
+    [ "$status" -ne 0 ]
+}
+
+@test "ws rm errors on unknown workspace" {
+    run just ws rm "no-such-ws-xyz"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not found"* ]]
+}

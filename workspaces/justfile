@@ -62,12 +62,76 @@ create name then_cmd="":
     echo "✓ Workspace '$name' created at: $ws"
     echo "✓ Branch: $branch"
 
+# Remove a workspace (fast: instant rename + background delete)
+[no-cd]
+rm name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    name="{{ name }}"
+    if [[ ! -d "$root/workspaces/$name" ]]; then
+        echo "Error: workspace '$name' not found" >&2
+        exit 1
+    fi
+    just ws _trash "$name"
+    just ws _sweep
+    echo "✓ Removed workspace '$name'; cleanup running in background"
+
+# Instant-move a workspace to trash, prune its worktree registration, delete its branch
+[no-cd]
+[private]
+_trash name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    name="{{ name }}"
+    ws="$root/workspaces/$name"
+
+    # Stop server + agent if running
+    for key in server agent; do
+        pgid=$(jq -r --arg k "$key" '.[$k].pgid // empty' "$ws/.workspace_info.json" 2>/dev/null || true)
+        [[ -n "$pgid" ]] && kill -TERM -- -"$pgid" 2>/dev/null || true
+    done
+
+    # Capture the branch, then instant-move to trash (same volume → O(1))
+    branch=$(git -C "$ws" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    trash="$root/workspaces/.trash"
+    mkdir -p "$trash"
+    mv "$ws" "$trash/$name-$(date +%s)-$$"
+
+    # Prune the now-stale workbench worktree registration + delete the branch
+    git -C "$root" worktree prune
+    [[ -n "$branch" && "$branch" != "HEAD" ]] && git -C "$root" branch -D "$branch" 2>/dev/null || true
+    echo "✓ Trashed workspace '$name' (branch: ${branch:-none})"
+
+# Background-delete the trash dir, then prune dev/tmp worktrees from source repos
+[no-cd]
+[private]
+_sweep:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    trash="$root/workspaces/.trash"
+    [[ -d "$trash" ]] || exit 0
+    nohup bash -c "
+        rm -rf '$trash'/* 2>/dev/null || true
+        for r in '$root'/repos/*/; do
+            [ -e \"\$r/.git\" ] && git -C \"\$r\" worktree prune 2>/dev/null || true
+        done
+    " >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+
 # Delete all workspaces not currently open in cmux
 [no-cd]
 cleanup:
     #!/usr/bin/env bash
     set -eo pipefail
     root="{{ root }}"
+
+    if [[ -z "${CMUX_WORKSPACE_ID:-}" ]]; then
+        echo "Error: cleanup requires cmux (it determines which workspaces are open)." >&2
+        exit 1
+    fi
 
     # Get names of open cmux workspaces
     open_ws=()
@@ -82,7 +146,7 @@ cleanup:
     for ws in "$root"/workspaces/*/; do
         [[ -d "$ws" ]] || continue
         name=$(basename "$ws")
-        [[ "$name" == "templates" ]] && continue
+        [[ "$name" == "templates" || "$name" == ".trash" ]] && continue
         found=false
         for open in "${open_ws[@]}"; do
             [[ "$name" == "$open" ]] && found=true && break
@@ -109,22 +173,9 @@ cleanup:
         exit 0
     fi
 
-    # Run deletion in a background terminal tab
-    pane=$(cmux identify --json | jq -r '.caller.pane_ref')
-    surface_json=$(cmux new-surface --workspace "${CMUX_WORKSPACE_ID}" --pane "$pane" --focus false --json)
-    surface=$(echo "$surface_json" | jq -r '.surface_ref')
-
-    # Build the deletion script
-    script="cd $root"
+    # Instant-trash each workspace, then one background sweep
     for name in "${ws_to_delete[@]}"; do
-        script="$script && { pgid=\$(jq -r '.server.pgid // empty' '$root/workspaces/$name/.workspace_info.json' 2>/dev/null); [[ -n \"\$pgid\" ]] && kill -TERM -- -\"\$pgid\" 2>/dev/null || true; }"
-        script="$script; for wt in '$root/workspaces/$name'/dev/*/; do [ -d \"\$wt\" ] && git -C \"\$wt\" worktree remove --force \"\$wt\" 2>/dev/null || true; done"
-        script="$script; for wt in '$root/workspaces/$name'/tmp/*/; do [ -d \"\$wt\" ] && git -C \"\$wt\" worktree remove --force \"\$wt\" 2>/dev/null || true; done"
-        script="$script && git worktree remove '$root/workspaces/$name' --force 2>/dev/null || rm -rf '$root/workspaces/$name'"
-        script="$script; branch=\$(git branch --list '*-$name' | head -1 | tr -d ' *'); [[ -n \"\$branch\" ]] && git branch -D \"\$branch\" 2>/dev/null || true"
-        script="$script; echo '✓ Removed workspace $name'"
+        just ws _trash "$name"
     done
-    script="$script && cmux close-surface --surface $surface"
-
-    cmux send --workspace "${CMUX_WORKSPACE_ID}" --surface "$surface" "$script\n"
-    echo "✓ Cleanup starting in background tab. Tab will close itself once complete."
+    just ws _sweep
+    echo "✓ Removed ${#ws_to_delete[@]} workspace(s); cleanup running in background"

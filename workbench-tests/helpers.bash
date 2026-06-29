@@ -18,4 +18,7 @@ wb_teardown() {
         git worktree remove "$TEST_WS" --force 2>/dev/null || rm -rf "$TEST_WS"
     fi
     git branch -D "$(date +%Y%m%d)-$TEST_WS_NAME" 2>/dev/null || true
+    # Sweep any trash left by `ws rm`/`cleanup` background jobs
+    rm -rf "$WB_ROOT/workspaces/.trash" 2>/dev/null || true
+    git -C "$WB_ROOT" worktree prune 2>/dev/null || true
 }

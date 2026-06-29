@@ -47,6 +47,7 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 |--------|-------------|
 | `just repos clone` | Clone/fetch all repos into workbench `repos/` |
 | `just ws create <name> [--then '<cmds>']` | Create a new workspace (fast scaffold; runs `<cmds>` in the new cmux workspace) |
+| `just ws rm <name>` | Remove a workspace (instant; deletes files in the background) |
 | `just ws cleanup` | Delete all workspaces not open in cmux |
 
 ### Workspace
