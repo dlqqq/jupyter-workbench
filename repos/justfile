@@ -16,5 +16,14 @@ clone:
             echo "⬇ Cloning $repo_name..."
             git clone "$url" "$root/repos/$repo_name"
         fi
+        # Mark origin as the gh default repo so `gh pr checkout` resolves
+        # non-interactively even after fork remotes accumulate on the shared clone.
+        just repos _set-default "$repo_name"
     done < <(jq -r 'keys[]' "$root/repos.json")
     echo "✓ All repos ready"
+
+# (internal) Set origin as the gh default base repo for the given cloned repo
+[no-cd]
+[private]
+_set-default repo_name:
+    git -C "{{ root }}/repos/{{ repo_name }}" config remote.origin.gh-resolved base
