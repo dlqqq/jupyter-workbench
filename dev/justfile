@@ -46,7 +46,10 @@ add repos:
     # Checkout PR if specified
     if [[ -n "$pr_number" ]]; then
         echo "Checking out PR #$pr_number..."
-        (cd "dev/$repo_name" && gh pr checkout "$pr_number")
+        # Land the PR on our workspace-scoped branch (not the PR's shared head
+        # branch name), so the same PR can be dev-added in multiple workspaces
+        # without "branch already used by worktree" collisions on the shared repo.
+        (cd "dev/$repo_name" && gh pr checkout "$pr_number" --branch "$branch" --force)
         pr_info=$(cd "dev/$repo_name" && gh pr view "$pr_number" --json headRepositoryOwner,headRepository)
         pr_author=$(echo "$pr_info" | jq -r '.headRepositoryOwner.login')
         pr_repo=$(echo "$pr_info" | jq -r '.headRepository.name')

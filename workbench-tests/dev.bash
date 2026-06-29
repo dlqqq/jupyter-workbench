@@ -132,3 +132,31 @@ teardown() {
     [ "$status" -eq 0 ]
     [ -d "$TEST_WS/dev/$FAKE" ]
 }
+
+@test "same repo dev-added to two workspaces uses distinct branches (no worktree collision)" {
+    (cd "$TEST_WS" && just dev add "$FAKE")
+
+    # Second workspace, created from the workbench root
+    ws2="ws2-$$-$RANDOM"
+    ws2_dir="$WB_ROOT/workspaces/$ws2"
+    (cd "$WB_ROOT" && just ws create "$ws2" >/dev/null)
+    # Fresh worktree's repos.json lacks the fake entry — register it + minimal pyproject
+    jq --arg r "$FAKE" --arg u "$WB_ROOT/repos/$FAKE" \
+        '.[$r] = {"url": $u, "packages": [{"name": $r, "parentDir": "."}]}' \
+        "$ws2_dir/repos.json" > "$ws2_dir/repos.json.tmp" && mv "$ws2_dir/repos.json.tmp" "$ws2_dir/repos.json"
+    printf '[project]\nname = "%s"\nversion = "0.0.0"\nrequires-python = ">=3.10"\n\n[tool.uv.workspace]\nmembers = []\n' "$ws2" > "$ws2_dir/pyproject.toml"
+
+    run bash -c "cd '$ws2_dir' && just dev add '$FAKE'"
+    [ "$status" -eq 0 ]
+    [ -d "$TEST_WS/dev/$FAKE" ]
+    [ -d "$ws2_dir/dev/$FAKE" ]
+    # Distinct, workspace-scoped branches → no shared-branch collision
+    b1=$(git -C "$TEST_WS/dev/$FAKE" rev-parse --abbrev-ref HEAD)
+    b2=$(git -C "$ws2_dir/dev/$FAKE" rev-parse --abbrev-ref HEAD)
+    [ "$b1" != "$b2" ]
+
+    # cleanup ws2
+    git -C "$WB_ROOT/repos/$FAKE" worktree remove "$ws2_dir/dev/$FAKE" --force 2>/dev/null || true
+    git worktree remove "$ws2_dir" --force 2>/dev/null || rm -rf "$ws2_dir"
+    git -C "$WB_ROOT" branch -D "$(date +%Y%m%d)-$ws2" 2>/dev/null || true
+}
