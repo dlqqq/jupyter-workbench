@@ -45,20 +45,24 @@ create name then_cmd="":
 
     then_cmd="{{ then_cmd }}"
 
-    # Open in cmux if available, otherwise print instructions
+    # Open in cmux if available, otherwise print instructions.
+    # In both cases the venv is activated first (it was created by `uv venv` above).
     if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
         if [[ -n "$then_cmd" ]]; then
-            cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$then_cmd")
-            echo "✓ Running in cmux workspace: $cmux_ws"
+            cmd="source .venv/bin/activate && $then_cmd"
         else
-            cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws")
-            echo "✓ Opened cmux workspace: $cmux_ws"
+            cmd="source .venv/bin/activate"
         fi
+        # --command sends text+Enter to the new workspace's terminal, so the
+        # activation persists in the interactive shell.
+        cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$cmd")
+        echo "✓ Opened cmux workspace: $cmux_ws"
     else
         echo ""
         echo "in a new terminal, run"
         echo ""
         echo "cd workspaces/$name"
+        echo "source .venv/bin/activate"
         echo "${then_cmd:-just dev setup}"
         echo ""
     fi

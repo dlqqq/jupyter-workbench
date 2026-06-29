@@ -74,6 +74,7 @@ teardown() { wb_teardown; }
     run just ws create "$TEST_WS_NAME"
     [ "$status" -eq 0 ]
     [[ "$output" == *"cd workspaces/$TEST_WS_NAME"* ]]
+    [[ "$output" == *"source .venv/bin/activate"* ]]
     [[ "$output" == *"just dev setup"* ]]
 }
 
@@ -81,6 +82,7 @@ teardown() { wb_teardown; }
     run just ws create "$TEST_WS_NAME" --then 'just dev add jupyter-ai-router'
     [ "$status" -eq 0 ]
     [[ "$output" == *"cd workspaces/$TEST_WS_NAME"* ]]
+    [[ "$output" == *"source .venv/bin/activate"* ]]
     [[ "$output" == *"just dev add jupyter-ai-router"* ]]
 }
 
