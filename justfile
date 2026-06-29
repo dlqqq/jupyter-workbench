@@ -16,15 +16,6 @@ alias restart := server::restart
 list-recipes:
     @just --list --list-heading=""
 
-# Run full workspace setup (create dev worktrees, install, enable extensions)
-setup-workspace:
-    #!/usr/bin/env bash
-    set -eo pipefail
-    ws_name=$(basename "{{ root }}")
-    trap 'cmux notify --title "Setup failed: $ws_name" --body "$BASH_COMMAND exited with $?"' ERR
-    just dev setup
-    just sync
-
 # Start server and open browser
 start: server::start browser::open
 
@@ -39,25 +30,27 @@ add pkgs:
     IFS=',' read -ra packages <<< "{{ pkgs }}"
     uv add "${packages[@]}"
 
-# Show which packages are dev-installed in this workspace
+# Show which repos are dev-installed in this workspace (scans ./dev)
 status:
     #!/usr/bin/env bash
     set -eo pipefail
     echo "Dev-installed repos:"
-    jq -r '.["dev-repos"] | keys[]' "{{ root }}/.workspace_info.json"
+    for d in "{{ root }}"/dev/*/; do
+        [[ -d "$d" ]] || continue
+        echo "  $(basename "$d")"
+    done
 
-# Spawn an agent session using the prompt from .workspace_info.json
-spawn-agent:
+# Spawn an agent session with the given prompt
+spawn-agent prompt="":
     #!/usr/bin/env bash
     set -eo pipefail
     root="{{ root }}"
-    prompt=$(jq -r '.prompt // empty' "$root/.workspace_info.json")
     pgid=$(ps -o pgid= -p $$ | tr -d ' ')
     jq --arg pgid "$pgid" '.agent = {"pgid": ($pgid | tonumber)}' \
         "$root/.workspace_info.json" > "$root/.workspace_info.json.tmp" \
         && mv "$root/.workspace_info.json.tmp" "$root/.workspace_info.json"
     source "$root/.venv/bin/activate"
-    exec kiro-cli chat --agent dlq -a "$prompt"
+    exec kiro-cli chat --agent dlq -a {{ quote(prompt) }}
 
 # Stop the agent session
 stop-agent:

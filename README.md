@@ -8,15 +8,19 @@ A lightweight Jupyter extension development orchestrator. Create parallel worksp
 # Pre-clone all repos (one-time setup)
 just repos clone
 
-# Create a workspace with specific packages for development
-just ws create my-feature --dev=jupyter-ai-acp-client,jupyter-ai-persona-manager
+# Create a workspace (fast scaffold)
+just ws create my-feature
 
-# Start JupyterLab from the workspace
+# Set it up: dev-install packages, sync the venv, enable extensions
 cd workspaces/my-feature
-just start
+just dev add jupyter-ai-acp-client,jupyter-ai-persona-manager
+just dev setup
 
-# Add another package later
-just dev add jupyter-ai-router
+# Or do it all in one shot via --then (runs inside the new cmux workspace)
+just ws create my-feature --then 'just dev add jupyter-ai-router && just dev setup && just spawn-agent "fix issue 42"'
+
+# Start JupyterLab
+just start
 
 # Check out a branch for reading (without dev-installing)
 just dev checkout jupyter-chat feature-branch
@@ -42,7 +46,7 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 | Recipe | Description |
 |--------|-------------|
 | `just repos clone` | Clone/fetch all repos into workbench `repos/` |
-| `just ws create <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace |
+| `just ws create <name> [--then '<cmds>']` | Create a new workspace (fast scaffold; runs `<cmds>` in the new cmux workspace) |
 | `just ws cleanup` | Delete all workspaces not open in cmux |
 
 ### Workspace
@@ -50,14 +54,15 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 | Recipe | Description |
 |--------|-------------|
 | `just start` | Start server and open browser |
-| `just dev add <repos>` | Create worktree under `dev/` + editable install (comma-separated) |
-| `just dev remove <repo>` | Remove a dev-installed repo |
+| `just dev add <repos>` | Create worktree(s) under `dev/` + add as editable member(s), no sync (comma-separated) |
+| `just dev setup [--with=<pkgs>]` | `uv sync` + enable extensions for all `dev/` repos (+ optional PyPI packages) |
+| `just dev remove <repo>` | Remove a dev-installed repo (worktree + pyproject member) |
 | `just dev checkout <repo> [branch]` | Create worktree under `tmp/` for reading a branch |
 | `just add <pkgs>` | Add PyPI packages (comma-separated) |
 | `just sync` | Sync the venv (`uv sync`) |
 | `just dev enable-extensions <repo>` | Enable extensions for a dev repo |
 | `just dev ensure-fork <repo>` | Create a GitHub fork for a dev repo |
-| `just spawn-agent` | Spawn an agent session (activates venv) |
+| `just spawn-agent <prompt>` | Spawn an agent session with a prompt (activates venv) |
 | `just stop-agent` | Stop the agent session |
 | `just close` | Stop agent + server, close cmux workspace |
 | `just server start` / `stop` / `restart` | Server management |

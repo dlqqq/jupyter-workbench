@@ -3,34 +3,14 @@ root := justfile_directory()
 # Create a new workspace
 [no-cd]
 [arg("name", help="workspace name")]
-[arg("dev", long, help="comma-separated repos to dev-install")]
-[arg("with_pkgs", long="with", help="comma-separated PyPI packages to add")]
-[arg("spawn_agent", long="spawn-agent", value="true")]
-[arg("prompt", long, help="agent prompt (requires --spawn-agent)")]
-create name dev="" with_pkgs="" spawn_agent="false" prompt="":
+[arg("then_cmd", long="then", help="command to run in the new cmux workspace")]
+create name then_cmd="":
     #!/usr/bin/env bash
     set -eo pipefail
     root="{{ root }}"
     cd "$root"
 
     name="{{ name }}"
-    IFS=',' read -ra dev_repos <<< "{{ dev }}"
-    IFS=',' read -ra with_pkgs <<< "{{ with_pkgs }}"
-
-    # Remove empty elements from empty defaults
-    [[ -z "${dev_repos[0]}" ]] && dev_repos=()
-    [[ -z "${with_pkgs[0]}" ]] && with_pkgs=()
-
-    # Validate dev repo names (strip #pr suffix for lookup)
-    for repo in "${dev_repos[@]}"; do
-        repo_name="${repo%%#*}"
-        url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$root/repos.json")
-        if [[ -z "$url" ]]; then
-            echo "Error: '$repo_name' not found in repos.json" >&2
-            echo "Available repos: $(jq -r 'keys[]' "$root/repos.json" | tr '\n' ' ')" >&2
-            exit 1
-        fi
-    done
 
     ws="$root/workspaces/$name"
     if [[ -d "$ws" ]]; then
@@ -53,35 +33,30 @@ create name dev="" with_pkgs="" spawn_agent="false" prompt="":
         fi
     done < <(jq -r 'keys[]' "$root/repos.json")
 
-    # Write workspace info with dev-repos as object
-    repos_obj="{}"
-    for repo in "${dev_repos[@]}"; do
-        repo_name="${repo%%#*}"
-        pr_number="${repo#*#}"
-        [[ "$pr_number" == "$repo" ]] && pr_number=""
-        if [[ -n "$pr_number" ]]; then
-            repos_obj=$(echo "$repos_obj" | jq --arg r "$repo_name" --argjson pr "$pr_number" '.[$r] = {"pr-number": $pr}')
-        else
-            repos_obj=$(echo "$repos_obj" | jq --arg r "$repo_name" '.[$r] = {}')
-        fi
-    done
-    prompt="{{ prompt }}"
-    jq -n --argjson repos "$repos_obj" --arg prompt "$prompt" \
-        '{"dev-repos": $repos, "prompt": $prompt, "server": null, "browser": null}' \
-        > "$ws/.workspace_info.json"
+    # Write runtime-only workspace info
+    jq -n '{"server": null, "browser": null, "agent": null}' > "$ws/.workspace_info.json"
 
     # Copy .env if present
     [[ -f "$root/.env" ]] && cp "$root/.env" "$ws/.env"
 
-    # Open in cmux if available
+    then_cmd="{{ then_cmd }}"
+
+    # Open in cmux if available, otherwise print instructions
     if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
-        if [[ "{{ spawn_agent }}" == "true" ]]; then
-            cmd="just setup-workspace && just spawn-agent"
+        if [[ -n "$then_cmd" ]]; then
+            cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$then_cmd")
+            echo "✓ Running in cmux workspace: $cmux_ws"
         else
-            cmd="just setup-workspace && cmux notify --title 'Setup done: $name' --body 'Ready'"
+            cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws")
+            echo "✓ Opened cmux workspace: $cmux_ws"
         fi
-        cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$cmd")
-        echo "✓ Setup running in cmux workspace: $cmux_ws"
+    else
+        echo ""
+        echo "in a new terminal, run"
+        echo ""
+        echo "cd workspaces/$name"
+        echo "${then_cmd:-just dev setup}"
+        echo ""
     fi
 
     echo "✓ Workspace '$name' created at: $ws"

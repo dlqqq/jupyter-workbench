@@ -1,6 +1,6 @@
 root := justfile_directory()
 
-# Dev-install repos (comma-separated: create worktree under dev/, editable install)
+# Dev-install repos (comma-separated: create worktree under dev/, add as editable member, NO sync)
 [no-cd]
 add repos:
     #!/usr/bin/env bash
@@ -19,6 +19,7 @@ add repos:
     url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$root/repos.json")
     if [[ -z "$url" ]]; then
         echo "Error: '$repo_name' not found in repos.json" >&2
+        echo "Available repos: $(jq -r 'keys[]' "$root/repos.json" | tr '\n' ' ')" >&2
         exit 1
     fi
     if [[ -d "dev/$repo_name" ]]; then
@@ -51,34 +52,20 @@ add repos:
         echo "Added remote '$pr_author' → $fork_url"
     fi
 
-    # Dev-install
+    # Add as editable workspace member(s) WITHOUT syncing
     pkg_parents=$(jq -r --arg r "$repo_name" '
         .[$r].packages // [{"parentDir": "."}]
         | .[].parentDir
     ' "$root/repos.json")
 
     while IFS= read -r parent_dir; do
-        uv add --editable --workspace "./dev/$repo_name/$parent_dir"
+        uv add "./dev/$repo_name/$parent_dir" --workspace --editable --no-sync
     done <<< "$pkg_parents"
 
-    # Update .workspace_info.json
-    if [[ -n "$pr_number" ]]; then
-        jq --arg r "$repo_name" --argjson pr "$pr_number" '.["dev-repos"][$r] = {"pr-number": $pr}' \
-            "$root/.workspace_info.json" > "$root/.workspace_info.json.tmp"
-    else
-        jq --arg r "$repo_name" '.["dev-repos"][$r] = {}' \
-            "$root/.workspace_info.json" > "$root/.workspace_info.json.tmp"
-    fi
-    mv "$root/.workspace_info.json.tmp" "$root/.workspace_info.json"
-
-    # Enable extensions
-    just dev enable-extensions "$repo_name"
-
-    echo ""
-    echo "✓ Added: dev/$repo_name"
+    echo "✓ Added: dev/$repo_name (run 'just dev setup' to install)"
     done
 
-# Remove a dev-installed repo (remove worktree)
+# Remove a dev-installed repo (remove worktree + pyproject member)
 [no-cd]
 remove repo_name:
     #!/usr/bin/env bash
@@ -91,14 +78,19 @@ remove repo_name:
         exit 1
     fi
 
+    # Remove pyproject member(s) without syncing
+    pkg_names=$(jq -r --arg r "$repo_name" '
+        .[$r].packages // [{"name": ($r | gsub("-";"_"))}]
+        | .[].name
+    ' "$root/repos.json")
+    while IFS= read -r pkg_name; do
+        [[ -n "$pkg_name" ]] || continue
+        uv remove "$pkg_name" --no-sync 2>/dev/null || true
+    done <<< "$pkg_names"
+
     # Remove worktree
     wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/repos"
     git -C "$wb_repos/$repo_name" worktree remove "$root/dev/$repo_name" --force
-
-    # Remove from .workspace_info.json
-    jq --arg r "$repo_name" 'del(.["dev-repos"][$r])' \
-        "$root/.workspace_info.json" > "$root/.workspace_info.json.tmp" \
-        && mv "$root/.workspace_info.json.tmp" "$root/.workspace_info.json"
 
     echo "✓ Removed: dev/$repo_name"
 
@@ -132,18 +124,18 @@ enable-extensions repo_name:
         (cd "$root/dev/$repo_name/$parent_dir" && jupyter labextension develop . --overwrite) || true
     done <<< "$pkg_parents"
 
-# Enable extensions for all dev-installed repos
+# Enable extensions for all dev-installed repos (scans ./dev)
 [no-cd]
 enable-all-extensions:
     #!/usr/bin/env bash
     set -eo pipefail
     root="{{ root }}"
-    repos=$(jq -r '.["dev-repos"] | keys[]' "$root/.workspace_info.json")
-    while IFS= read -r repo; do
-        [[ -n "$repo" ]] || continue
+    for d in "$root"/dev/*/; do
+        [[ -d "$d" ]] || continue
+        repo=$(basename "$d")
         echo "=== $repo ==="
         just dev enable-extensions "$repo"
-    done <<< "$repos"
+    done
 
 # Ensure a fork exists for a repo and add as remote
 [no-cd]
@@ -159,62 +151,26 @@ ensure-fork repo_name:
         echo "Fork remote already exists"
     fi
 
-# Create worktrees and dev-install all repos from .workspace_info.json (used by setup-workspace)
+# Set up the venv: install --with packages, uv sync, enable extensions for all ./dev repos
 [no-cd]
-setup:
+[arg("with_pkgs", long="with", help="comma-separated PyPI packages to add")]
+setup with_pkgs="":
     #!/usr/bin/env bash
     set -eo pipefail
     root="{{ root }}"
     cd "$root"
 
-    wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/repos"
-    ws_name=$(basename "$root")
+    # Add --with PyPI packages without syncing yet
+    IFS=',' read -ra pkgs <<< "{{ with_pkgs }}"
+    [[ -z "${pkgs[0]}" ]] && pkgs=()
+    if [[ ${#pkgs[@]} -gt 0 ]]; then
+        uv add "${pkgs[@]}" --no-sync
+    fi
 
-    while IFS= read -r repo_name; do
-        [[ -n "$repo_name" ]] || continue
-        pr_number=$(jq -r --arg r "$repo_name" '.["dev-repos"][$r]["pr-number"] // empty' "$root/.workspace_info.json")
-        url=$(jq -r --arg r "$repo_name" '.[$r].url // empty' "$root/repos.json")
-        if [[ -z "$url" ]]; then
-            echo "Error: '$repo_name' not found in repos.json" >&2
-            exit 1
-        fi
+    # Install everything in one pass (editable members + with-pkgs + base deps)
+    uv sync
 
-        # Ensure source repo exists
-        if [[ ! -d "$wb_repos/$repo_name" ]]; then
-            echo "Cloning $repo_name..."
-            git clone "$url" "$wb_repos/$repo_name"
-        fi
-
-        # Create worktree under dev/
-        mkdir -p dev
-        branch="$(date +%Y%m%d)-$ws_name/$repo_name"
-        echo "Creating worktree: dev/$repo_name (branch: $branch)..."
-        git -C "$wb_repos/$repo_name" worktree add "$root/dev/$repo_name" -b "$branch"
-
-        if [[ -n "$pr_number" ]]; then
-            echo "Checking out PR #$pr_number..."
-            (cd "dev/$repo_name" && gh pr checkout "$pr_number")
-            pr_info=$(cd "dev/$repo_name" && gh pr view "$pr_number" --json headRepositoryOwner,headRepository)
-            pr_author=$(echo "$pr_info" | jq -r '.headRepositoryOwner.login')
-            pr_repo=$(echo "$pr_info" | jq -r '.headRepository.name')
-            fork_url="git@github.com:$pr_author/$pr_repo.git"
-            (cd "dev/$repo_name" && git remote add "$pr_author" "$fork_url" 2>/dev/null || true)
-            echo "Added remote '$pr_author' → $fork_url"
-        fi
-
-        # Dev-install
-        pkg_parents=$(jq -r --arg r "$repo_name" '
-            .[$r].packages // [{"parentDir": "."}]
-            | .[].parentDir
-        ' "$root/repos.json")
-
-        while IFS= read -r parent_dir; do
-            uv add --editable --workspace "./dev/$repo_name/$parent_dir"
-        done <<< "$pkg_parents"
-
-        echo "✓ Ready: dev/$repo_name"
-    done < <(jq -r '.["dev-repos"] | keys[]' "$root/.workspace_info.json")
-
+    # Enable extensions for every repo under ./dev
     just dev enable-all-extensions
 
 # Check out a repo branch under tmp/ (for reading without modifying repos/)

@@ -22,12 +22,15 @@ teardown() {
     [[ "$branch" == "$(date +%Y%m%d)-$TEST_WS_NAME" ]]
 }
 
-@test "ws create writes .workspace_info.json" {
+@test "ws create writes runtime-only .workspace_info.json (no dev-repos/prompt)" {
     just ws create "$TEST_WS_NAME"
     [ -f "$TEST_WS/.workspace_info.json" ]
-    # Verify structure
-    run jq -e '.["dev-repos"]' "$TEST_WS/.workspace_info.json"
+    # Has runtime keys
+    run jq -e 'has("server") and has("browser") and has("agent")' "$TEST_WS/.workspace_info.json"
     [ "$status" -eq 0 ]
+    # Does NOT have dev-repos or prompt
+    run jq -e 'has("dev-repos") or has("prompt")' "$TEST_WS/.workspace_info.json"
+    [ "$status" -ne 0 ]
 }
 
 @test "ws create symlinks pre-cloned repos into workspace repos/" {
@@ -64,4 +67,19 @@ teardown() {
     just ws create "$TEST_WS_NAME"
     dirty=$(git -C "$TEST_WS" status --porcelain)
     [ -z "$dirty" ]
+}
+
+@test "ws create without cmux prints setup instructions" {
+    # helpers unsets CMUX_WORKSPACE_ID
+    run just ws create "$TEST_WS_NAME"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"cd workspaces/$TEST_WS_NAME"* ]]
+    [[ "$output" == *"just dev setup"* ]]
+}
+
+@test "ws create --then without cmux prints the then command" {
+    run just ws create "$TEST_WS_NAME" --then 'just dev add jupyter-ai-router'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"cd workspaces/$TEST_WS_NAME"* ]]
+    [[ "$output" == *"just dev add jupyter-ai-router"* ]]
 }
