@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Shared setup/teardown for workbench tests
+# Shared setup/teardown helpers for workbench tests.
+# Named distinctly (wb_*) so test-file setup()/teardown() can call them
+# without shadowing the bats-reserved function names.
 
 WB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-setup() {
+wb_setup() {
     TEST_ID="test-$$-$RANDOM"
     TEST_WS_NAME="$TEST_ID"
     TEST_WS="$WB_ROOT/workspaces/$TEST_WS_NAME"
-    # Unset CMUX to ensure recipes skip cmux logic
+    # Ensure recipes take the no-cmux path
     unset CMUX_WORKSPACE_ID
 }
 
-teardown() {
+wb_teardown() {
     if [[ -d "$TEST_WS" ]]; then
         git worktree remove "$TEST_WS" --force 2>/dev/null || rm -rf "$TEST_WS"
     fi

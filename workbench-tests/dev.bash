@@ -2,11 +2,12 @@
 # Hermetic tests for `just dev add` / `just dev remove`.
 # Uses a local fake source repo so no network/clone is needed.
 
+load helpers
+
 FAKE=fakedevpkg
 
 setup() {
-    load helpers
-    setup   # sets TEST_ID / TEST_WS_NAME / TEST_WS, unsets CMUX_WORKSPACE_ID
+    wb_setup   # sets TEST_ID / TEST_WS_NAME / TEST_WS, unsets CMUX_WORKSPACE_ID
 
     # Create the workspace (runs from the main checkout's recipe)
     just ws create "$TEST_WS_NAME" >/dev/null
@@ -49,12 +50,11 @@ EOF
 }
 
 teardown() {
-    load helpers
     # Remove any dev worktree created off the fake source
     if [ -d "$TEST_WS/dev/$FAKE" ]; then
         git -C "$WB_ROOT/repos/$FAKE" worktree remove "$TEST_WS/dev/$FAKE" --force 2>/dev/null || true
     fi
-    teardown   # removes the workspace worktree + branch
+    wb_teardown   # removes the workspace worktree + branch
     rm -rf "$WB_ROOT/repos/$FAKE"
 }
 

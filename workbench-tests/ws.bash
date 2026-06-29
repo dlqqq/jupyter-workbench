@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
 
-setup() {
-    load helpers
-    setup
-}
+load helpers
 
-teardown() {
-    load helpers
-    teardown
-}
+setup() { wb_setup; }
+teardown() { wb_teardown; }
 
 @test "ws create creates a worktree at workspaces/<name>" {
     run just ws create "$TEST_WS_NAME"
