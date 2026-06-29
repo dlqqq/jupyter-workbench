@@ -110,3 +110,25 @@ teardown() {
     run grep -q "dev/$FAKE" "$TEST_WS/pyproject.toml"
     [ "$status" -ne 0 ]
 }
+
+@test "dev remove deletes the worktree branch (no same-day re-add collision)" {
+    cd "$TEST_WS"
+    just dev add "$FAKE"
+    just dev remove "$FAKE"
+    # the dated worktree branch should be gone from the source repo
+    run git -C "$WB_ROOT/repos/$FAKE" show-ref --verify --quiet "refs/heads/$(date +%Y%m%d)-$TEST_WS_NAME/$FAKE"
+    [ "$status" -ne 0 ]
+    # re-adding the same day must succeed
+    run just dev add "$FAKE"
+    [ "$status" -eq 0 ]
+    [ -d "$TEST_WS/dev/$FAKE" ]
+}
+
+@test "dev add succeeds even when a stale branch already exists" {
+    cd "$TEST_WS"
+    # simulate an orphaned branch from a previously-failed add
+    git -C "$WB_ROOT/repos/$FAKE" branch "$(date +%Y%m%d)-$TEST_WS_NAME/$FAKE"
+    run just dev add "$FAKE"
+    [ "$status" -eq 0 ]
+    [ -d "$TEST_WS/dev/$FAKE" ]
+}

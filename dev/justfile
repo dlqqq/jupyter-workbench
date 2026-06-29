@@ -37,6 +37,9 @@ add repos:
     mkdir -p dev
     ws_name=$(basename "$root")
     branch="$(date +%Y%m%d)-$ws_name/$repo_name"
+    # Clean up any stale branch left by a prior (possibly failed) add so the
+    # worktree branch name is free.
+    git -C "$wb_repos/$repo_name" branch -D "$branch" 2>/dev/null || true
     echo "Creating worktree: dev/$repo_name (branch: $branch)..."
     git -C "$wb_repos/$repo_name" worktree add "$root/dev/$repo_name" -b "$branch"
 
@@ -94,9 +97,20 @@ remove repo_name:
     # Match "dev/<repo>" exactly or "dev/<repo>/..." (not "dev/<repo>-other").
     sed -i.bak "\#\"dev/$repo_name[/\"]#d" pyproject.toml && rm -f pyproject.toml.bak
 
-    # Remove the worktree
+    # Capture the worktree's current branch (e.g. a PR branch) before removing it
     wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/repos"
+    ws_name=$(basename "$root")
+    cur_branch=$(git -C "$root/dev/$repo_name" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+
+    # Remove the worktree
     git -C "$wb_repos/$repo_name" worktree remove "$root/dev/$repo_name" --force
+
+    # Delete the branches this workspace created for this repo, so a same-day
+    # re-add doesn't collide: the dated worktree branch(es) + the checked-out branch.
+    while IFS= read -r b; do
+        [[ -n "$b" ]] && git -C "$wb_repos/$repo_name" branch -D "$b" 2>/dev/null || true
+    done < <(git -C "$wb_repos/$repo_name" branch --list "????????-$ws_name/$repo_name" --format='%(refname:short)' 2>/dev/null)
+    [[ -n "$cur_branch" && "$cur_branch" != "HEAD" ]] && git -C "$wb_repos/$repo_name" branch -D "$cur_branch" 2>/dev/null || true
 
     echo "✓ Removed: dev/$repo_name"
 
