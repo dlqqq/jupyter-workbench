@@ -78,11 +78,20 @@ teardown() { wb_teardown; }
     [[ "$output" == *"just dev setup"* ]]
 }
 
-@test "ws create points at the setup.sh + ws setup flow" {
+@test "ws create points at the setup.sh + PROMPT.md + ws setup flow" {
     run just ws create "$TEST_WS_NAME"
     [ "$status" -eq 0 ]
     [[ "$output" == *"setup.sh"* ]]
+    [[ "$output" == *"PROMPT.md"* ]]
     [[ "$output" == *"just ws setup $TEST_WS_NAME"* ]]
+}
+
+@test "ws spawn errors when PROMPT.md is missing" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    # ws spawn resolves the workspace root from git, so run it from inside.
+    run bash -c "cd '$TEST_WS' && just ws spawn"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"PROMPT.md"* ]]
 }
 
 @test "ws setup errors when the workspace is missing" {

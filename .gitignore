@@ -21,7 +21,8 @@ tmp/
 node_modules/
 *.egg-info/
 __pycache__/
-**/PLAN.md
+**/PROMPT.md
+**/setup.sh
 
 # Workbench layout
 workspaces/*

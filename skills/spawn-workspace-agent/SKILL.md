@@ -1,6 +1,6 @@
 ---
 name: spawn-workspace-agent
-description: Spawn a workspace agent in a dedicated workspace to work on a task or GitHub issue. Determines which packages to dev-install, creates a workspace, opens a cmux workspace, and launches a workspace agent with a thin PLAN.md. ROOT ORCHESTRATORS ONLY — do not use from inside a workspace. Use when the user wants a task worked on in a fresh isolated workspace, says "spawn an agent for this", or provides a GitHub issue URL to delegate.
+description: Spawn a workspace agent in a dedicated workspace to work on a task or GitHub issue. Determines which packages to dev-install, creates a workspace, opens a cmux workspace, and launches a workspace agent with a PROMPT.md. ROOT ORCHESTRATORS ONLY — do not use from inside a workspace. Use when the user wants a task worked on in a fresh isolated workspace, says "spawn an agent for this", or provides a GitHub issue URL to delegate.
 ---
 
 # Spawn Workspace Agent
@@ -46,7 +46,7 @@ Rules:
 ### Step 2: Rough summary of changes
 
 Write a brief, high-level summary of what the task requires — enough to seed
-PLAN.md. This is a rough sketch, not an implementation plan.
+PROMPT.md. This is a rough sketch, not an implementation plan.
 
 ### Step 3: Name the workspace
 
@@ -63,7 +63,7 @@ Abbreviations: `jupyter-ai`→`jai`, `jupyter-ai-acp-client`→`acp`,
 
 If the task is too complex or too vague to scaffold confidently, **redirect —
 don't refuse.** Complexity is not a reason to avoid spawning; it's a reason not
-to plan at the root. Spawn the workspace anyway, but seed PLAN.md so the
+to plan at the root. Spawn the workspace anyway, but seed PROMPT.md so the
 workspace agent does the research and planning itself.
 
 ### Step 5: Scaffold the workspace
@@ -79,7 +79,7 @@ just ws create <name>
 The workspace directory exists synchronously when this returns, so you can write
 files into it immediately.
 
-### Step 6: Write setup.sh and a thin PLAN.md (both as files)
+### Step 6: Write setup.sh and PROMPT.md (both as files)
 
 This is the heart of the handoff, and the reason the flow is split: **all
 free-form text goes into files, never through a flag.** Passing a long prompt or
@@ -95,29 +95,40 @@ launching the agent:
 set -eo pipefail
 just dev add <repos>
 just dev setup [--with=<pkgs>]
-just spawn-agent
+just ws spawn
 ```
 
 - `<repos>` — comma-separated repos to dev-install (each optionally `<repo>#<pr>`)
 - `--with=<pkgs>` — optional comma-separated PyPI packages (passed to `dev setup`)
 - `dev add` creates the worktrees + editable members; `dev setup` syncs the venv
-  and enables extensions; `spawn-agent` launches the CLI session with a FIXED
-  prompt template (it derives the workspace name from the directory and tells the
-  agent to read PLAN.md — there is no prompt argument to pass).
+  and enables extensions; `ws spawn` reads `PROMPT.md` and launches the agent CLI
+  with it as the prompt (no prompt argument is passed on the command line).
 
-Write `PLAN.md` to the workspace root with just the handoff context:
-- Task / issue link and title
-- The rough summary from Step 2
-- Which packages are dev-installed and why
+Write `PROMPT.md` to the workspace root — this **is** the agent's prompt
+(`ws spawn` passes its contents verbatim to the agent CLI). Open with the worker
+framing, then the task:
 
-Keep it thin — the workspace agent expands it after researching. Do NOT plan the
-implementation here, and do NOT repeat general workflow info (build/test/notify
-commands); the workspace agent reads that from AGENTS.md.
+```markdown
+You are the workspace agent for the <name> workspace under the Jupyter Workbench.
+Read AGENTS.md first if it isn't already in your context — it describes the
+recipes, skills, and workflow. Gather context and research first; if anything is
+unclear, grill the user with the grill-me skill before writing code. Open a PR
+for each affected repo when done, and notify the user when complete or stuck.
+
+## Task
+
+<task / issue link + title, the rough summary from Step 2, and which packages are
+dev-installed and why>
+```
+
+Keep the task section thin — the workspace agent expands it after researching. Do
+NOT plan the implementation here, and do NOT repeat general workflow info
+(build/test/notify commands); the agent reads that from AGENTS.md.
 
 ### Step 7: Provision and launch, then notify
 
-Both files are on disk, so there is no PLAN.md race — run setup.sh in the
-workspace's cmux terminal:
+Both files are on disk, so there is no race — run setup.sh in the workspace's
+cmux terminal:
 
 ```bash
 just ws setup <name>
@@ -135,6 +146,8 @@ cmux notify --title "Spawned: <workspace-name>" --body "<one-line task summary>"
 
 - The spawned agent is a separate CLI session — its own context and conversation
 - The workspace is fully isolated — changes there don't affect other workspaces
-- `setup.sh` and `PLAN.md` are gitignored workspace artifacts — they record how
+- `setup.sh` and `PROMPT.md` are gitignored workspace artifacts — they record how
   the workspace was provisioned and what it was asked to do
+- `ws spawn` and `ws setup` are agent-plumbing recipes — normally invoked through
+  `setup.sh`, not run by hand
 - TODO: Make the agent CLI configurable (support Codex, Claude Code, Kiro, etc.)

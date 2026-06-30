@@ -28,8 +28,9 @@ just dev add jupyter-ai-acp-client,jupyter-ai-persona-manager
 just dev setup
 
 # Or script the provisioning: write workspaces/my-feature/setup.sh with the
-# chain (dev add → dev setup → spawn-agent), then run it in the cmux workspace.
-# setup.sh is a file, so no command text crosses a shell-quoting boundary.
+# chain (dev add → dev setup → ws spawn) plus a PROMPT.md, then run it in the
+# cmux workspace. Both are files, so no command/prompt text crosses a shell-
+# quoting boundary. (Usually an orchestrator agent does this — see below.)
 just ws setup my-feature
 
 # Check out a branch for reading (without dev-installing)
@@ -57,9 +58,15 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 |--------|-------------|
 | `just repos clone` | Clone/fetch all repos into workbench `repos/` |
 | `just ws create <name>` | Create a new workspace (fast scaffold only) |
-| `just ws setup <name>` | Run the workspace's `setup.sh` in its cmux workspace (provision + launch) |
+| `just ws setup <name>` | Run the workspace's `setup.sh` in its cmux workspace (provision + launch) — _agent-invoked_ |
+| `just ws spawn` | Launch the workspace agent with `PROMPT.md` as its prompt — _agent-invoked_ |
 | `just ws rm <name>` | Remove a workspace (instant; deletes files in the background) |
 | `just ws cleanup` | Delete all workspaces not open in cmux |
+
+> `ws setup` and `ws spawn` are normally driven by an orchestrator agent through
+> a workspace's `setup.sh` (see the `spawn-workspace-agent` skill), not run by
+> hand. `ws create` + writing `setup.sh`/`PROMPT.md` are the human/orchestrator
+> entry points.
 
 ### Workspace
 
@@ -73,7 +80,6 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 | `just sync` | Sync the venv (`uv sync`) |
 | `just dev enable-extensions <repo>` | Enable extensions for a dev repo |
 | `just dev ensure-fork <repo>` | Create a GitHub fork for a dev repo |
-| `just spawn-agent` | Spawn the workspace agent (fixed prompt; it reads `PLAN.md` for the task) |
 | `just stop-agent` | Stop the agent session |
 | `just close` | Stop agent + server, close cmux workspace |
 

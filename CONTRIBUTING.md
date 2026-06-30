@@ -37,8 +37,8 @@ wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.gi
 
 ### Venv activation
 
-`just spawn-agent <prompt>` sources `.venv/bin/activate` before launching the agent,
-and `ws create` activates the venv in the new cmux workspace's terminal. So agents
+`just ws spawn` sources `.venv/bin/activate` before launching the agent, and
+`ws create` activates the venv in the new cmux workspace's terminal. So agents
 run `pytest`, `jlpm`, `mypy`, etc. directly.
 
 ## Workspaces (= git worktrees)
@@ -86,7 +86,7 @@ Runtime state only (which repos are dev-installed is determined by scanning `./d
 }
 ```
 
-`agent` is managed by `spawn-agent`/`stop-agent`; `server`/`browser` by the
+`agent` is managed by `ws spawn`/`stop-agent`; `server`/`browser` by the
 (deprecated) server/browser modules.
 
 ## Tests

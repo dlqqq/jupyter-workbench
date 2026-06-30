@@ -52,10 +52,10 @@ create name:
     # Open in cmux if available, otherwise print instructions. In both cases the
     # venv is activated first (it was created by `uv venv` above). Provisioning is
     # deliberately NOT run here — `ws create` only scaffolds. Write a setup.sh
-    # (and PLAN.md) into the workspace, then run `just ws setup <name>`. Keeping
+    # (and PROMPT.md) into the workspace, then run `just ws setup <name>`. Keeping
     # scaffold and provisioning separate means: (1) no free-form command crosses
     # a shell-quoting boundary — setup.sh is a file; (2) no race between writing
-    # PLAN.md and the agent reading it; (3) provisioning is re-runnable on failure.
+    # PROMPT.md and the agent reading it; (3) provisioning is re-runnable on failure.
     if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
         # --command sends text+Enter to the new workspace's terminal, so the
         # activation persists in the interactive shell.
@@ -73,7 +73,7 @@ create name:
 
     echo "✓ Workspace '$name' created at: $ws"
     echo "✓ Branch: $branch"
-    echo "→ Next: write workspaces/$name/setup.sh, then run 'just ws setup $name'"
+    echo "→ Next: write workspaces/$name/{setup.sh,PROMPT.md}, then run 'just ws setup $name'"
 
 # Provision a workspace by running its setup.sh in its cmux workspace
 [no-cd]
@@ -98,7 +98,7 @@ setup name:
     # Hand off to the workspace's setup.sh — a file, so no command text is ever
     # passed through a flag. It runs with the venv activated and cwd at the
     # workspace root. In cmux, run it in the workspace's own terminal so any agent
-    # it launches (via `just spawn-agent`) lives in that interactive session.
+    # it launches (via `just ws spawn`) lives in that interactive session.
     if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
         ref=$(cmux list-workspaces --json | jq -r --arg t "[ws] $name" '.workspaces[] | select(.title == $t) | .ref' | head -1)
         if [[ -z "$ref" ]]; then
@@ -114,6 +114,33 @@ setup name:
         source .venv/bin/activate
         bash setup.sh
     fi
+
+# Spawn the workspace agent with PROMPT.md as its prompt (agent-invoked via setup.sh)
+[no-cd]
+spawn:
+    #!/usr/bin/env bash
+    set -eo pipefail
+
+    # This runs from inside the workspace worktree, so the workspace root is the
+    # git toplevel (justfile_directory() here would be the workbench workspaces/).
+    ws=$(git rev-parse --show-toplevel)
+
+    if [[ ! -f "$ws/PROMPT.md" ]]; then
+        echo "Error: no PROMPT.md in this workspace ($ws)." >&2
+        echo "  Write PROMPT.md (the agent's task + handoff context) first." >&2
+        exit 1
+    fi
+
+    # The prompt IS the file — free-form text goes to disk, never through a flag.
+    # We pass it as the agent CLI's positional INPUT (kiro-cli's [INPUT] arg).
+    prompt=$(cat "$ws/PROMPT.md")
+
+    pgid=$(ps -o pgid= -p $$ | tr -d ' ')
+    jq --arg pgid "$pgid" '.agent = {"pgid": ($pgid | tonumber)}' \
+        "$ws/.workspace_info.json" > "$ws/.workspace_info.json.tmp" \
+        && mv "$ws/.workspace_info.json.tmp" "$ws/.workspace_info.json"
+    source "$ws/.venv/bin/activate"
+    exec kiro-cli chat --agent dlq -a "$prompt"
 
 # Reset a workspace's worktree branch onto the latest workbench main
 [no-cd]
