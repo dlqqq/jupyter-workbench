@@ -83,6 +83,58 @@ stop-agent:
         && mv "$root/.workspace_info.json.tmp" "$root/.workspace_info.json"
     echo "✓ Agent force killed"
 
+# Merge this workspace's PR, then reset the worktree to a fresh branch off main
+[group('workspace')]
+land:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    cd "$root"
+
+    # 1. Refuse if there are uncommitted tracked changes (untracked files survive
+    #    the branch switch, so they don't block — but we list them as an FYI).
+    dirty=$(git status --porcelain --untracked-files=no)
+    if [[ -n "$dirty" ]]; then
+        echo -e "\033[1;31mAborting: this worktree has uncommitted changes.\033[0m" >&2
+        echo "$dirty" >&2
+        echo "" >&2
+        echo "Commit, stash, or discard them, then run 'just land' again." >&2
+        exit 1
+    fi
+    untracked=$(git status --porcelain --untracked-files=normal | grep '^??' || true)
+    [[ -n "$untracked" ]] && echo -e "\033[1;33mNote: untracked files (preserved across the reset):\033[0m\n$untracked\n"
+
+    # 2. Resolve the remote (the one `main` tracks), repo slug, and current branch.
+    remote=$(git config branch.main.remote 2>/dev/null || true)
+    [[ -z "$remote" ]] && remote=$(git remote | head -1)
+    repo=$(git remote get-url "$remote" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')
+    oldbranch=$(git rev-parse --abbrev-ref HEAD)
+
+    # 3. Confirm a PR exists for this branch, then squash-merge it.
+    if ! gh pr view "$oldbranch" --repo "$repo" --json number >/dev/null 2>&1; then
+        echo "Aborting: no open PR found for branch '$oldbranch' in $repo." >&2
+        exit 1
+    fi
+    echo "Merging PR for '$oldbranch' into $repo (squash)..."
+    gh pr merge "$oldbranch" --repo "$repo" --squash --delete-branch
+
+    # 4. Pull the merged main into the shared store.
+    git fetch "$remote"
+
+    # 5. Reset this worktree onto a fresh dated branch off the updated main.
+    wsname=$(basename "$root")
+    newbranch="$(date +%Y%m%d)-$wsname"
+    if git show-ref --verify --quiet "refs/heads/$newbranch"; then
+        newbranch="$newbranch-$(date +%H%M%S)"
+    fi
+    git switch -c "$newbranch" "$remote/main"
+
+    # 6. Delete the old merged branch (we're no longer on it).
+    git branch -D "$oldbranch" 2>/dev/null || true
+
+    echo "✓ Merged and deleted '$oldbranch'"
+    echo "✓ Worktree reset onto '$newbranch' (off $remote/main)"
+
 # Close this workspace (stop agent + server, close cmux workspace)
 close:
     #!/usr/bin/env bash
