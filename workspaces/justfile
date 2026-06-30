@@ -106,7 +106,8 @@ setup name:
             echo "  Run 'just ws create $name' first (it opens the cmux workspace)." >&2
             exit 1
         fi
-        cmux send --workspace "$ref" "source .venv/bin/activate && bash setup.sh"
+        # Trailing \n submits the line (cmux send does NOT append Enter on its own).
+        cmux send --workspace "$ref" 'source .venv/bin/activate && bash setup.sh\n'
         echo "✓ Sent setup.sh to cmux workspace '$ref' ([ws] $name)"
     else
         cd "$ws"
