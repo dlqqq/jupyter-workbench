@@ -37,6 +37,13 @@ create name then_cmd="":
         fi
     done < <(jq -r 'keys[]' "$root/repos.json")
 
+    # Seed tmp/ with sample notebooks (the server is rooted in tmp/, so these
+    # show up in the file browser as ready-to-use scratch notebooks)
+    mkdir -p "$ws/tmp"
+    if [[ -d "$root/workspaces/.sample-notebooks" ]]; then
+        cp -R "$root/workspaces/.sample-notebooks/." "$ws/tmp/"
+    fi
+
     # Write runtime-only workspace info
     jq -n '{"server": null, "browser": null, "agent": null}' > "$ws/.workspace_info.json"
 
