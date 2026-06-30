@@ -105,7 +105,7 @@ description matches your task.
 | Skill | When to use |
 |-------|-------------|
 | `skills/grill-me` | Stress-test a plan by interviewing the user one question at a time. |
-| `skills/land-workbench-pr` | Merge this workspace's approved workbench PR, then reset the worktree to a fresh branch off main. |
+| `skills/merge-and-rebase` | Merge this workspace's approved workbench PR, then reset the worktree onto the latest main. |
 | `skills/open-pr` | Open a pull request from a repo in the workspace. |
 | `skills/rebuild-frontend` | After frontend changes (`.ts`/`.tsx`/`.css`), before running E2E tests. |
 | `skills/spawn-workspace-agent` | **Root orchestrator only** — scaffold a workspace and launch a workspace agent for a task. |
