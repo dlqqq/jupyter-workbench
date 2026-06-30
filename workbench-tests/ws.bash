@@ -78,12 +78,32 @@ teardown() { wb_teardown; }
     [[ "$output" == *"just dev setup"* ]]
 }
 
-@test "ws create --then without cmux prints the then command" {
-    run just ws create "$TEST_WS_NAME" --then 'just dev add jupyter-ai-router'
+@test "ws create points at the setup.sh + ws setup flow" {
+    run just ws create "$TEST_WS_NAME"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"cd workspaces/$TEST_WS_NAME"* ]]
-    [[ "$output" == *"source .venv/bin/activate"* ]]
-    [[ "$output" == *"just dev add jupyter-ai-router"* ]]
+    [[ "$output" == *"setup.sh"* ]]
+    [[ "$output" == *"just ws setup $TEST_WS_NAME"* ]]
+}
+
+@test "ws setup errors when the workspace is missing" {
+    run just ws setup "no-such-ws-xyz"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "ws setup errors when setup.sh is missing" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    run just ws setup "$TEST_WS_NAME"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"setup.sh"* ]]
+}
+
+@test "ws setup runs the workspace's setup.sh (no-cmux path)" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    printf '#!/usr/bin/env bash\necho ran-setup-marker\n' > "$TEST_WS/setup.sh"
+    run just ws setup "$TEST_WS_NAME"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ran-setup-marker"* ]]
 }
 
 @test "ws rm removes the workspace directory immediately" {

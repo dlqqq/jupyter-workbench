@@ -27,8 +27,10 @@ cd workspaces/my-feature
 just dev add jupyter-ai-acp-client,jupyter-ai-persona-manager
 just dev setup
 
-# Or do it all in one shot via --then (runs inside the new cmux workspace)
-just ws create my-feature --then 'just dev add jupyter-ai-router && just dev setup && just spawn-agent "fix issue 42"'
+# Or script the provisioning: write workspaces/my-feature/setup.sh with the
+# chain (dev add → dev setup → spawn-agent), then run it in the cmux workspace.
+# setup.sh is a file, so no command text crosses a shell-quoting boundary.
+just ws setup my-feature
 
 # Check out a branch for reading (without dev-installing)
 just dev checkout jupyter-chat feature-branch
@@ -54,7 +56,8 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 | Recipe | Description |
 |--------|-------------|
 | `just repos clone` | Clone/fetch all repos into workbench `repos/` |
-| `just ws create <name> [--then '<cmds>']` | Create a new workspace (fast scaffold; runs `<cmds>` in the new cmux workspace) |
+| `just ws create <name>` | Create a new workspace (fast scaffold only) |
+| `just ws setup <name>` | Run the workspace's `setup.sh` in its cmux workspace (provision + launch) |
 | `just ws rm <name>` | Remove a workspace (instant; deletes files in the background) |
 | `just ws cleanup` | Delete all workspaces not open in cmux |
 
@@ -70,7 +73,7 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 | `just sync` | Sync the venv (`uv sync`) |
 | `just dev enable-extensions <repo>` | Enable extensions for a dev repo |
 | `just dev ensure-fork <repo>` | Create a GitHub fork for a dev repo |
-| `just spawn-agent <prompt>` | Spawn an agent session with a prompt (activates venv) |
+| `just spawn-agent` | Spawn the workspace agent (fixed prompt; it reads `PLAN.md` for the task) |
 | `just stop-agent` | Stop the agent session |
 | `just close` | Stop agent + server, close cmux workspace |
 

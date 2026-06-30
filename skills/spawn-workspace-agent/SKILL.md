@@ -63,34 +63,47 @@ Abbreviations: `jupyter-ai`→`jai`, `jupyter-ai-acp-client`→`acp`,
 
 If the task is too complex or too vague to scaffold confidently, **redirect —
 don't refuse.** Complexity is not a reason to avoid spawning; it's a reason not
-to plan at the root. Spawn the workspace anyway, but seed PLAN.md and the agent
-prompt so the workspace agent does the research and planning itself (see the
-research-first prompt in Step 5).
+to plan at the root. Spawn the workspace anyway, but seed PLAN.md so the
+workspace agent does the research and planning itself.
 
-### Step 5: Create the workspace and launch the agent
+### Step 5: Scaffold the workspace
 
-Run from the workbench root. `ws create` scaffolds the workspace (fast) and runs
-the `--then` command inside the new cmux workspace, venv already activated:
+Run from the workbench root. `ws create` only scaffolds — it makes the worktree,
+venv, and an open cmux workspace, then returns. It does NOT provision or launch
+an agent (that's Step 6–7).
 
 ```bash
-just ws create <name> --then 'just dev add <repos> && just dev setup [--with=<pkgs>] && just spawn-agent "$PROMPT"'
+just ws create <name>
+```
+
+The workspace directory exists synchronously when this returns, so you can write
+files into it immediately.
+
+### Step 6: Write setup.sh and a thin PLAN.md (both as files)
+
+This is the heart of the handoff, and the reason the flow is split: **all
+free-form text goes into files, never through a flag.** Passing a long prompt or
+command string as a shell argument means it crosses 3–4 quoting layers (just →
+cmux → terminal → CLI) and any em-dash, quote, `$`, or newline breaks it. Files
+sidestep that entirely.
+
+Write `setup.sh` to the workspace root — the provisioning chain that ends by
+launching the agent:
+
+```bash
+#!/usr/bin/env bash
+set -eo pipefail
+just dev add <repos>
+just dev setup [--with=<pkgs>]
+just spawn-agent
 ```
 
 - `<repos>` — comma-separated repos to dev-install (each optionally `<repo>#<pr>`)
 - `--with=<pkgs>` — optional comma-separated PyPI packages (passed to `dev setup`)
 - `dev add` creates the worktrees + editable members; `dev setup` syncs the venv
-  and enables extensions; `just spawn-agent` launches the CLI session.
-
-Where `$PROMPT` is (no single quotes inside, so it nests in the `--then` string):
-```
-You are the workspace agent for the <workspace-name> workspace under the Jupyter Workbench. First, read AGENTS.md if it is not already in your context — it describes the recipes, skills, and workflow for working in a workspace. Then read PLAN.md for your task. Gather context and do research first; if anything is still unclear, grill the user using the grill-me skill before writing code. Follow the workflow in AGENTS.md, dispatching subagents for independent work where it helps. Notify the user once you are complete or get stuck.
-```
-
-`ws create` returns immediately (non-blocking); the `--then` chain runs
-asynchronously in the new cmux workspace. The workspace directory is created
-synchronously before the command returns, so you can write PLAN.md right after.
-
-### Step 6: Write a thin PLAN.md, then notify
+  and enables extensions; `spawn-agent` launches the CLI session with a FIXED
+  prompt template (it derives the workspace name from the directory and tells the
+  agent to read PLAN.md — there is no prompt argument to pass).
 
 Write `PLAN.md` to the workspace root with just the handoff context:
 - Task / issue link and title
@@ -101,7 +114,19 @@ Keep it thin — the workspace agent expands it after researching. Do NOT plan t
 implementation here, and do NOT repeat general workflow info (build/test/notify
 commands); the workspace agent reads that from AGENTS.md.
 
-Then notify the user that the workspace has started:
+### Step 7: Provision and launch, then notify
+
+Both files are on disk, so there is no PLAN.md race — run setup.sh in the
+workspace's cmux terminal:
+
+```bash
+just ws setup <name>
+```
+
+This sources the venv and runs `setup.sh`. If provisioning fails (e.g. a version
+conflict in `dev setup`), fix it and re-run `just ws setup <name>` — it's
+idempotent up to the agent launch. Then notify the user:
+
 ```bash
 cmux notify --title "Spawned: <workspace-name>" --body "<one-line task summary>"
 ```
@@ -110,4 +135,6 @@ cmux notify --title "Spawned: <workspace-name>" --body "<one-line task summary>"
 
 - The spawned agent is a separate CLI session — its own context and conversation
 - The workspace is fully isolated — changes there don't affect other workspaces
+- `setup.sh` and `PLAN.md` are gitignored workspace artifacts — they record how
+  the workspace was provisioned and what it was asked to do
 - TODO: Make the agent CLI configurable (support Codex, Claude Code, Kiro, etc.)

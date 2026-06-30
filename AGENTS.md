@@ -42,8 +42,10 @@ has full repo context.
 
 To spawn a workspace agent for a task, follow `skills/spawn-workspace-agent/SKILL.md`.
 In short: grill only enough for a go/no-go decision (use the `grill-me` skill),
-pick the repos to dev-install, name the workspace, then `just ws create … --then …`
-and write a thin `PLAN.md`. You scaffold; you do **not** plan the implementation.
+pick the repos to dev-install, name the workspace, `just ws create <name>`, write
+`setup.sh` + a thin `PLAN.md` into the workspace (free-form text goes in files,
+never through a flag), then `just ws setup <name>` to provision and launch. You
+scaffold; you do **not** plan the implementation.
 
 Trivial one-off workbench tweaks that need no iteration (a doc fix, a recipe
 one-liner) can be done here on `main` directly — but when in doubt, prefer a

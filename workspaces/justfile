@@ -1,10 +1,9 @@
 root := justfile_directory()
 
-# Create a new workspace
+# Create a new workspace (scaffold only; provision with `just ws setup <name>`)
 [no-cd]
 [arg("name", help="workspace name")]
-[arg("then_cmd", long="then", help="command to run in the new cmux workspace")]
-create name then_cmd="":
+create name:
     #!/usr/bin/env bash
     set -eo pipefail
     root="{{ root }}"
@@ -50,19 +49,17 @@ create name then_cmd="":
     # Copy .env if present
     [[ -f "$root/.env" ]] && cp "$root/.env" "$ws/.env"
 
-    then_cmd="{{ then_cmd }}"
-
-    # Open in cmux if available, otherwise print instructions.
-    # In both cases the venv is activated first (it was created by `uv venv` above).
+    # Open in cmux if available, otherwise print instructions. In both cases the
+    # venv is activated first (it was created by `uv venv` above). Provisioning is
+    # deliberately NOT run here — `ws create` only scaffolds. Write a setup.sh
+    # (and PLAN.md) into the workspace, then run `just ws setup <name>`. Keeping
+    # scaffold and provisioning separate means: (1) no free-form command crosses
+    # a shell-quoting boundary — setup.sh is a file; (2) no race between writing
+    # PLAN.md and the agent reading it; (3) provisioning is re-runnable on failure.
     if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
-        if [[ -n "$then_cmd" ]]; then
-            cmd="source .venv/bin/activate && $then_cmd"
-        else
-            cmd="source .venv/bin/activate"
-        fi
         # --command sends text+Enter to the new workspace's terminal, so the
         # activation persists in the interactive shell.
-        cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$cmd")
+        cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "source .venv/bin/activate")
         echo "✓ Opened cmux workspace: $cmux_ws"
     else
         echo ""
@@ -70,12 +67,52 @@ create name then_cmd="":
         echo ""
         echo "cd workspaces/$name"
         echo "source .venv/bin/activate"
-        echo "${then_cmd:-just dev setup}"
+        echo "just dev setup"
         echo ""
     fi
 
     echo "✓ Workspace '$name' created at: $ws"
     echo "✓ Branch: $branch"
+    echo "→ Next: write workspaces/$name/setup.sh, then run 'just ws setup $name'"
+
+# Provision a workspace by running its setup.sh in its cmux workspace
+[no-cd]
+[arg("name", help="workspace name")]
+setup name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    name="{{ name }}"
+    ws="$root/workspaces/$name"
+
+    if [[ ! -d "$ws" ]]; then
+        echo "Error: workspace '$name' not found at $ws" >&2
+        exit 1
+    fi
+    if [[ ! -f "$ws/setup.sh" ]]; then
+        echo "Error: no setup.sh in workspace '$name'." >&2
+        echo "  Write $ws/setup.sh (the provisioning chain) first, then re-run." >&2
+        exit 1
+    fi
+
+    # Hand off to the workspace's setup.sh — a file, so no command text is ever
+    # passed through a flag. It runs with the venv activated and cwd at the
+    # workspace root. In cmux, run it in the workspace's own terminal so any agent
+    # it launches (via `just spawn-agent`) lives in that interactive session.
+    if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
+        ref=$(cmux list-workspaces --json | jq -r --arg t "[ws] $name" '.workspaces[] | select(.title == $t) | .ref' | head -1)
+        if [[ -z "$ref" ]]; then
+            echo "Error: no open cmux workspace titled '[ws] $name'." >&2
+            echo "  Run 'just ws create $name' first (it opens the cmux workspace)." >&2
+            exit 1
+        fi
+        cmux send --workspace "$ref" "source .venv/bin/activate && bash setup.sh"
+        echo "✓ Sent setup.sh to cmux workspace '$ref' ([ws] $name)"
+    else
+        cd "$ws"
+        source .venv/bin/activate
+        bash setup.sh
+    fi
 
 # Reset a workspace's worktree branch onto the latest workbench main
 [no-cd]
