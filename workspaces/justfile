@@ -83,12 +83,15 @@ create name then_cmd="":
 rebase name="":
     #!/usr/bin/env bash
     set -eo pipefail
-    root="{{ root }}"
     name="{{ name }}"
+
+    # Resolve the workbench root from git (this recipe runs from inside a
+    # workspace, where justfile_directory() would be the workspace itself).
+    wb=$(git rev-parse --path-format=absolute --git-common-dir | xargs dirname)
 
     # Default to the invocation directory's workspace
     [[ -z "$name" ]] && name=$(basename "$(pwd)")
-    ws="$root/workspaces/$name"
+    ws="$wb/workspaces/$name"
     if [[ ! -d "$ws" ]]; then
         echo "Error: workspace '$name' not found at $ws" >&2
         exit 1
