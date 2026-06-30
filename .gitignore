@@ -26,5 +26,6 @@ __pycache__/
 # Workbench layout
 workspaces/*
 !workspaces/templates/
+!workspaces/.sample-notebooks/
 !workspaces/justfile
 worktrees/
