@@ -61,17 +61,27 @@ Package abbreviations:
 
 ### Step 5: Create workspace and spawn agent
 
-Run from the workbench root:
+Run from the workbench root. `ws create` scaffolds the workspace (fast) and runs
+the `--then` command inside the new cmux workspace, with the venv already
+activated:
+
 ```bash
-just create-workspace <name> --dev=<repos> [--with=<pkgs>] --spawn-agent --prompt="$PROMPT"
+just ws create <name> --then 'just dev add <repos> && just dev setup [--with=<pkgs>] && just spawn-agent "$PROMPT"'
 ```
 
-Where `$PROMPT` is:
+- `<repos>` — comma-separated repos to dev-install (each optionally `<repo>#<pr>`)
+- `--with=<pkgs>` — optional comma-separated PyPI packages (passed to `dev setup`)
+- `dev add` creates the worktrees + editable members, `dev setup` syncs the venv
+  and enables extensions, then `spawn-agent` launches the Kiro session.
+
+Where `$PROMPT` is (no single quotes inside, so it nests in the `--then` string):
 ```
 You are a worker agent assigned to the <workspace-name> workspace under the Jupyter Workbench. First, read AGENTS.md if it is not already in your context. It describes the available recipes, skills, and general workflow for working in a workspace. Then read PLAN.md for your specific task. Follow the worker agent workflow described in AGENTS.md. Notify the user once you are complete or get stuck.
 ```
 
-This returns immediately (non-blocking). The workspace directory is created synchronously before the command returns.
+`ws create` returns immediately (non-blocking); the `--then` chain runs
+asynchronously in the new cmux workspace. The workspace directory is created
+synchronously before the command returns, so you can write PLAN.md right after.
 
 ### Step 6: Write PLAN.md
 
@@ -81,7 +91,7 @@ Write `PLAN.md` to the workspace root with:
 - Which packages are dev-installed and why
 - Implementation guidance (level of detail depends on complexity)
 
-Do NOT repeat general workflow info (build/restart/test/notify commands) — the worker agent will read that from AGENTS.md automatically.
+Do NOT repeat general workflow info (build/test/notify commands) — the worker agent will read that from AGENTS.md automatically.
 
 ## Notes
 

@@ -3,7 +3,7 @@
 <!-- This AGENTS.md is for orchestrator agents working from the main workbench root.
      Workspace worker agents use the AGENTS.md in workspaces/templates/AGENTS.md instead. -->
 
-jupyter-workbench is a Jupyter extension development orchestrator. It manages parallel workspaces where developers edit specific packages while the rest install from PyPI. Each workspace is a git worktree of the workbench repo, so agents can also modify workbench infrastructure (recipes, scripts, templates) and open PRs for both the workbench and the dev-installed packages.
+jupyter-workbench is a Jupyter extension development orchestrator (v0.2). It manages parallel workspaces where developers edit specific packages while the rest install from PyPI. Each workspace is a git worktree of the workbench repo, so agents can also modify workbench infrastructure (recipes, skills, docs, templates) and open PRs for both the workbench and the dev-installed packages.
 
 ## Orchestrator (main workbench root)
 
@@ -13,16 +13,20 @@ You manage the workbench. Your job is to create workspaces for new tasks and spa
 
 | Recipe | Description |
 |--------|-------------|
-| `clone-all` | Pre-clone/fetch all repos (run once or to update) |
-| `create-workspace <name> [--dev=<repos>] [--with=<pkgs>] [--spawn-agent] [--prompt=<text>]` | Create a new workspace (non-blocking) |
-| `cleanup` | Delete all workspaces not open in cmux (human-only, requires interactive confirmation) |
+| `just repos clone` | Pre-clone/fetch all repos into `repos/` (run once or to update) |
+| `just ws create <name> [--then '<cmds>']` | Create a workspace (fast scaffold); runs `<cmds>` in the new cmux workspace |
+| `just ws rm <name>` | Remove a workspace (instant; background delete) |
+| `just ws cleanup` | Delete all workspaces not open in cmux (human-only, interactive confirmation) |
+
+To delegate an issue, use the `spawn-agent` skill, which composes:
+`just ws create <name> --then 'just dev add <repos> && just dev setup && just spawn-agent "<prompt>"'`.
 
 ## Workspace worker (inside `workspaces/<name>/`)
 
-You are working in a workspace. Your workspace is a git worktree on branch `YYYYMMDD-<name>`. You can:
+You are working in a workspace — a git worktree on branch `YYYYMMDD-<name>`, with the venv already activated. You can:
 
 1. **Edit dev-installed packages** — make changes in `dev/<repo>` and open PRs to their upstream repositories.
-2. **Edit workbench infrastructure** — modify justfiles, scripts, skills, docs, or templates and open a PR to the workbench repo itself.
+2. **Edit workbench infrastructure** — modify justfiles, skills, docs, or templates and open a PR to the workbench repo itself.
 
 Up to N+1 PRs from a single workspace (1 for the workbench, N for each dev-installed package).
 
@@ -43,26 +47,28 @@ See `workspaces/templates/AGENTS.md` for the full worker agent workflow.
 - Do NOT modify other workspaces or the main checkout
 - Do NOT edit files in `repos/` — they're shared symlinks
 - Stay on your branch for workbench changes
-- Workspace artifacts (`.venv/`, `repos/`, `dev/`, `tmp/`, `.workspace_info.json`) are gitignored
+- Workspace artifacts (`.venv/`, `repos/`, `dev/`, `tmp/`, `.workspace_info.json`, `pyproject.toml`) are gitignored
 
 ## Justfile Architecture
 
-All recipes live in a single `justfile` at the repo root, organized by `[group]`:
+Recipes are organized into modules (`mod` in the root `justfile`):
 
-| Group | Purpose |
-|-------|---------|
-| `workbench` | Workspace lifecycle |
-| `workspace` | Operations inside a workspace |
-| `workspace-server` | JupyterLab server management |
-| `workspace-browser` | Browser automation |
-| `workspace-jupyter-chat` | Jupyter Chat helpers |
-| `workspace-notebook` | Notebook automation |
+| Module | Purpose |
+|--------|---------|
+| `repos` | Pre-clone/fetch source repos (`just repos clone`) |
+| `dev` | Per-workspace repo management (`add`, `setup`, `remove`, `checkout`, `ensure-fork`) |
+| `ws` | Workspace lifecycle (`create`, `rm`, `cleanup`) |
 
-Run `just list-recipes` to see all available recipes.
+Run `just --list --list-submodules` to see all recipes.
 
-## Browser Eval Scripts
+> **Deprecated:** the `server` and `browser` modules are cmux/macOS-based and are
+> being replaced by JupyterLab's Galata (Playwright) E2E framework. Do not use
+> them in new automation.
 
-JS scripts in `scripts/` can be run via `just browser-eval <script-name> [args...]`.
+## Tests
+
+Workbench recipes are covered by bats tests under `workbench-tests/`. Run them with
+`just workbench-tests run-all` (or `run <file>`). Add coverage when you change recipes.
 
 ## Modifying recipes or workbench internals
 

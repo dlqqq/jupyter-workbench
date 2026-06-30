@@ -1,6 +1,17 @@
 # jupyter-workbench
 
+**Jupyter Workbench v0.2**
+
 A lightweight Jupyter extension development orchestrator. Create parallel workspaces with only the packages you're actively editing — everything else installs from PyPI.
+
+> **Status & direction.** Server/browser interaction currently goes through
+> [cmux](https://github.com/cmux) (macOS-oriented). This is transitional: the
+> plan for v0.2 is to migrate verification onto JupyterLab's
+> [Galata](https://github.com/jupyterlab/jupyterlab/tree/main/galata) end-to-end
+> framework (built on Playwright) exclusively. That removes the cmux dependency
+> for testing and lets the workbench — and the agents it spawns — run on Linux
+> and in remote/CI environments. The `server` and `browser` recipe modules below
+> are **deprecated** and will be replaced by Galata-based flows.
 
 ## Quick Start
 
@@ -18,9 +29,6 @@ just dev setup
 
 # Or do it all in one shot via --then (runs inside the new cmux workspace)
 just ws create my-feature --then 'just dev add jupyter-ai-router && just dev setup && just spawn-agent "fix issue 42"'
-
-# Start JupyterLab
-just start
 
 # Check out a branch for reading (without dev-installing)
 just dev checkout jupyter-chat feature-branch
@@ -54,7 +62,6 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 
 | Recipe | Description |
 |--------|-------------|
-| `just start` | Start server and open browser |
 | `just dev add <repos>` | Create worktree(s) under `dev/` + add as editable member(s), no sync (comma-separated) |
 | `just dev setup [--with=<pkgs>]` | `uv sync` + enable extensions for all `dev/` repos (+ optional PyPI packages) |
 | `just dev remove <repo>` | Remove a dev-installed repo (worktree + pyproject member) |
@@ -66,6 +73,15 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 | `just spawn-agent <prompt>` | Spawn an agent session with a prompt (activates venv) |
 | `just stop-agent` | Stop the agent session |
 | `just close` | Stop agent + server, close cmux workspace |
+
+### Deprecated (cmux-based, to be replaced by Galata)
+
+These still work on macOS via cmux but are slated for removal once Galata-based
+flows land. **Do not build new automation on them.**
+
+| Recipe | Description |
+|--------|-------------|
+| `just start` | Start server and open browser |
 | `just server start` / `stop` / `restart` | Server management |
 | `just browser open` / `close` / `refresh` | Browser management |
 | `just browser eval <script> [args...]` | Run a JS script in the browser |
@@ -85,7 +101,7 @@ jupyter-workbench/                  ← workbench root (main checkout)
 │   └── ...
 ├── dev/                            ← (workspace-level: dev-installed worktrees)
 │   └── justfile                    ← dev module
-├── scripts/                        ← JS scripts for browser-eval
+├── scripts/                        ← JS scripts for browser-eval (deprecated)
 ├── tmp/                            ← scratch space
 └── workspaces/
     ├── justfile                    ← ws module

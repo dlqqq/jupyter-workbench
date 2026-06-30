@@ -1,11 +1,11 @@
 # Workspace Agent Guide
 
-You are a worker agent assigned to a task inside a workspace. Your workspace is a **git worktree** of the workbench repo on branch `YYYYMMDD-<name>`. Your venv is already activated. Stay in your workspace. If you need another package, use `just dev`. Do NOT spawn new workspaces from within a workspace.
+You are a worker agent assigned to a task inside a workspace. Your workspace is a **git worktree** of the workbench repo on branch `YYYYMMDD-<name>`. Your venv is already activated. Stay in your workspace. If you need another package, use `just dev add`. Do NOT spawn new workspaces from within a workspace.
 
 ## What you can do from this workspace
 
 1. **Edit dev-installed packages** — make changes in `dev/<repo>` and open PRs to their upstream repos.
-2. **Edit workbench infrastructure** — modify the justfile, scripts, skills, docs, or templates and open a PR to the workbench repo.
+2. **Edit workbench infrastructure** — modify justfiles, skills, docs, or templates and open a PR to the workbench repo.
 
 Up to **N+1 PRs** from a single workspace: 1 for the workbench + N for each dev-installed package.
 
@@ -15,30 +15,28 @@ Up to **N+1 PRs** from a single workspace: 1 for the workbench + N for each dev-
 |-----------|---------|
 | `repos/` | Symlinks → read-only context. Browse source here, never edit. |
 | `dev/` | Worktrees for editing. Dev-installed, push PRs from here. |
-| `tmp/` | Worktrees for reading specific branches (`just checkout-repo`). |
+| `tmp/` | Worktrees for reading specific branches (`just dev checkout <repo> [branch]`). |
 
 ## General workflow
 
 > Instructions in your prompt and PLAN.md always take precedence.
 
-1. **Understand and reproduce the issue.**
-   - For frontend issues: check for E2E tests (`**/ui-tests/**/*`). Add a failing test or reproduce visually.
-   - For backend issues: try a failing pytest first.
-   - Start the server if needed: `just start-server`
+1. **Understand and reproduce the issue.** Prefer a failing test as your repro:
+   - **Backend** (`.py`): write a failing `pytest` against `dev/<repo>`.
+   - **Frontend** (`.ts`/`.tsx`/`.css`): if the repo has an E2E (Galata) suite, add a failing E2E test; otherwise add the best unit/integration test you can.
 
 2. **Work on the fix.** After making changes:
-   - Frontend changes (`.ts`, `.tsx`, `.css`): use the `rebuild-frontend` skill
-   - Backend changes (`.py`): run `just restart-server`
-   - **Keep screenshots** in `screenshots/` — do NOT delete them.
+   - **Frontend**: rebuild before running E2E tests — `(cd dev/<repo> && jlpm build)` (see the `rebuild-frontend` skill).
+   - **Backend**: the editable install picks up `.py` changes automatically — just re-run the tests.
 
-3. **Add test coverage.** At least unit/integration level tests.
+3. **Add test coverage.** At least unit/integration level. Add an E2E (Galata) test when the repo supports it.
 
-4. **Verify with static analysis.** Run from inside the dev repo:
+4. **Verify.** Run from inside the dev repo (venv is already active):
    ```bash
    cd dev/<repo-name>
-   mypy .
-   jlpm lint
    pytest
+   jlpm lint      # frontend repos
+   mypy .         # if the repo uses mypy
    ```
 
 5. **Notify the user.**
@@ -47,24 +45,16 @@ Up to **N+1 PRs** from a single workspace: 1 for the workbench + N for each dev-
 
 ## Git tips
 
-- Workspace artifacts (`.venv/`, `repos/`, `dev/`, `tmp/`, `.workspace_info.json`) are gitignored.
+- Workspace artifacts (`.venv/`, `repos/`, `dev/`, `tmp/`, `.workspace_info.json`, `pyproject.toml`) are gitignored.
 - Only intentional workbench changes show in `git status`.
 - For workbench PRs, commit and push from the worktree root.
-- For package PRs, commit and push from inside `dev/<repo-name>/`.
-
-## Sign-off steps (only when asked)
-
-1. `just stop-server`
-2. Close extra surfaces (server terminal, browser)
-3. Leave only the agent's own terminal.
+- For package PRs, commit and push from inside `dev/<repo-name>/` (use `just dev ensure-fork <repo>` first).
 
 ## Quick Reference
 
 | Situation | Where to look |
 |-----------|---------------|
-| Made frontend changes | `.kiro/skills/rebuild-frontend/SKILL.md` |
-| Made backend changes | Run `just restart-server` |
-| Need to read server logs | `.kiro/skills/read-jupyter-server-logs/SKILL.md` |
-| Need to interact with Jupyter Chat | `.kiro/skills/jupyter-chat-browser-use/SKILL.md` |
-| Need to run JupyterLab commands | `.kiro/skills/run-jupyterlab-command/SKILL.md` |
+| Made frontend changes (`.ts`/`.tsx`/`.css`) | `.kiro/skills/rebuild-frontend/SKILL.md` |
+| Made backend changes (`.py`) | Re-run `pytest` (editable install is live) |
+| Need to dev-install another repo | `just dev add <repo>` then `just dev setup` |
 | Need to open a pull request | `.kiro/skills/open-pr/SKILL.md` |

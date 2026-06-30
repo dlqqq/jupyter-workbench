@@ -16,13 +16,13 @@ Push your changes to a fork and open a PR against the upstream repo.
 
 ### 1. Ensure fork exists
 
-From inside the repo:
+From the workspace root:
 
 ```bash
-just ensure-fork
+just dev ensure-fork <repo-name>
 ```
 
-This creates a GitHub fork (if needed) and sets up the `fork` remote + `gh repo set-default`.
+This creates a GitHub fork (if needed) and sets up the `fork` remote + `gh repo set-default` for `dev/<repo-name>`.
 
 ### 2. Create a branch (if not already on one)
 
@@ -39,17 +39,11 @@ git add -A
 git commit -m "<concise description of changes>"
 ```
 
-### 4. Take screenshots (if relevant)
+### 4. Include screenshots (if relevant)
 
-If the change has visual impact, take screenshots and save them to `screenshots/`:
-
-```bash
-mkdir -p screenshots
-SURFACE=$(just get-browser-surface)
-cmux browser $SURFACE screenshot --out screenshots/before.png
-# ... make changes, rebuild, reload ...
-cmux browser $SURFACE screenshot --out screenshots/after.png
-```
+If the change has visual impact, include any screenshots you saved under
+`screenshots/` during testing, and reference them in `PR.md` as
+`![description](screenshots/filename.png)`.
 
 ### 5. Write PR.md preview
 
@@ -110,12 +104,11 @@ Note: Screenshots referenced in PR.md won't render on GitHub (they're local path
 ## Full Example
 
 ```bash
-cd jupyter-ai-router
+# From the workspace root: ensure the fork + default repo are set up
+just dev ensure-fork jupyter-ai-router
 
-# Ensure fork
-just ensure-fork
-
-# Branch and commit
+# Work inside the dev worktree
+cd dev/jupyter-ai-router
 git checkout -b fix-priority-routing
 git add -A
 git commit -m "Fix priority routing for multiple personas"

@@ -1,58 +1,51 @@
 ---
 name: rebuild-frontend
-description: Rebuild frontend extensions after TypeScript/CSS changes. Use when you've modified frontend files (.ts, .tsx, .css) in one or more packages and need to see the changes in JupyterLab.
+description: Rebuild frontend extensions after TypeScript/CSS changes. Use when you've modified frontend files (.ts, .tsx, .css) in a dev-installed package and need the changes reflected in JupyterLab or before running E2E tests.
 ---
 
 # Rebuild Frontend
 
-Rebuild JupyterLab frontend extensions after making changes to TypeScript, CSS, or other frontend files.
+Rebuild a JupyterLab frontend extension after editing TypeScript, CSS, or other
+frontend source files. The workspace venv is already activated, so you run the
+package's own tooling directly inside its `dev/` worktree.
 
 ## When to Use
 
-- After modifying `.ts`, `.tsx`, `.css`, or other frontend source files
-- NOT needed for backend-only changes (`.py` files) — those require a server restart instead
+- After modifying `.ts`, `.tsx`, `.css`, or other frontend source files in `dev/<repo>`
+- **Before running E2E (Galata) tests** for a package — the tests load the built assets
+- NOT needed for backend-only changes (`.py` files)
 
 ## Steps
 
-### 0. Reinstall dependencies (only if needed)
+### 0. Reinstall JS deps (only if needed)
 
-If `package.json` or `yarn.lock` has changed (e.g., after pulling new changes or adding a dependency), reinstall first:
+If `package.json` or `yarn.lock` changed (e.g. after pulling or adding a dependency):
 
 ```bash
-cd <package>/ && just jlpm
+(cd dev/<repo-name> && jlpm)
 ```
 
-`jlpm` is JupyterLab's bundled version of yarn. Skip this step if you only changed source files.
+`jlpm` is JupyterLab's bundled yarn. Skip this if you only changed source files.
 
 ### 1. Rebuild
 
-**Single package:**
 ```bash
-cd <package>/ && just build
+(cd dev/<repo-name> && jlpm build)
 ```
 
-**All packages in the workspace:**
-```bash
-just build-all
-```
-
-Only rebuild packages whose frontend files have actually changed. If you're unsure which packages changed, `just build-all` is safe but slower.
-
-### 2. Reload the browser
-
-After rebuilding, reload the JupyterLab page so it picks up the new assets:
-
-```bash
-SURFACE=$(just get-browser-surface)
-cmux browser $SURFACE reload
-```
-
-If no browser is open, skip this step — the next time JupyterLab is opened it will load the rebuilt extensions.
+Run this for each dev package whose frontend files changed. Always rebuild
+before invoking that package's E2E tests.
 
 ## Summary
 
 | What changed | Action |
 |---|---|
-| `.ts`/`.tsx`/`.css` files | `just build` (in the repo) + reload browser |
-| `package.json` or `yarn.lock` | `just jlpm` (in the repo) + `just build` + reload browser |
-| `.py` files only | No frontend rebuild needed (restart server instead) |
+| `.ts`/`.tsx`/`.css` files | `(cd dev/<repo> && jlpm build)` |
+| `package.json` / `yarn.lock` | `(cd dev/<repo> && jlpm)` then `jlpm build` |
+| `.py` files only | No frontend rebuild needed |
+
+## Notes
+
+- Verifying the change in a live browser is being migrated to JupyterLab's
+  Galata (Playwright) E2E framework. Prefer adding/running an E2E test over
+  manual visual inspection where the repo supports it.

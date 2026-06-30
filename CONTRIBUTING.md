@@ -2,69 +2,73 @@
 
 How the workbench works internally. Read this before modifying recipes or workbench infrastructure.
 
-## Single Justfile
+## Modular justfiles
 
-All recipes live in one `justfile` at the repo root. Groups separate concerns:
+The root `justfile` composes submodules via `mod`:
 
-- `[workbench]` — workspace lifecycle (create, cleanup, clone-all)
-- `[workspace]` — operations inside a workspace (dev, setup, agent, etc.)
-- `[workspace-server]` / `[workspace-browser]` — server and browser management
-- `[workspace-jupyter-chat]` / `[workspace-notebook]` — domain-specific helpers
+| Module | File | Purpose |
+|--------|------|---------|
+| `repos` | `repos/justfile` | Pre-clone/fetch source repos (`just repos clone`) |
+| `dev` | `dev/justfile` | Per-workspace repo management (`add`, `setup`, `remove`, `checkout`, `ensure-fork`, `enable-extensions`) |
+| `ws` | `workspaces/justfile` | Workspace lifecycle (`create`, `rm`, `cleanup`) |
+| `server` | `server.just` | **Deprecated** — cmux/macOS JupyterLab server control |
+| `browser` | `browser.just` | **Deprecated** — cmux/macOS browser control |
 
-Since each workspace is a worktree of the same repo, the justfile is always available.
+`repos/`, `dev/`, and `workspaces/` have their directory *contents* gitignored but
+their `justfile` tracked (see `.gitignore`). Since each workspace is a worktree of
+the same repo, every module is available from inside a workspace too.
+
+> The `server` and `browser` modules are being replaced by JupyterLab's Galata
+> (Playwright) E2E framework so the workbench can run on Linux/CI. Don't add new
+> automation that depends on them.
 
 ### Path resolution
 
-A `root` variable is defined at the top:
+Each module defines `root := justfile_directory()` (which always resolves to the
+root justfile's directory — i.e. the workbench or workspace root) and marks recipes
+`[no-cd]` so they run from the invocation directory. In bash blocks, assign
+`root="{{ root }}"` and use `$root`.
 
-```just
-root := justfile_directory()
+To find the shared clones at the workbench root from inside a workspace worktree:
+
+```bash
+wb_repos="$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/repos"
 ```
-
-All recipes use `$root` in bash (assigned as `root="{{ root }}"`).
 
 ### Venv activation
 
-`spawn-agent` sources `.venv/bin/activate` before launching the agent. Agents can run `pytest`, `jlpm`, `mypy`, etc. directly.
+`just spawn-agent <prompt>` sources `.venv/bin/activate` before launching the agent,
+and `ws create` activates the venv in the new cmux workspace's terminal. So agents
+run `pytest`, `jlpm`, `mypy`, etc. directly.
 
 ## Workspaces (= git worktrees)
 
-Each workspace is a git worktree. `create-workspace` runs:
+`just ws create <name>` runs:
 
 ```bash
 git worktree add -b "YYYYMMDD-<name>" "workspaces/<name>"
 ```
 
-Agents can edit both dev-installed packages AND workbench infrastructure from the same workspace, producing up to N+1 PRs.
+then generates `pyproject.toml` (project name = workspace name), creates an empty
+venv (`uv venv`), and symlinks every pre-cloned repo into the workspace's `repos/`.
+Agents can edit both dev-installed packages AND workbench infrastructure from one
+workspace, producing up to N+1 PRs.
 
 ## Repo layout (repos/ / dev/ / tmp/)
 
-### Workbench root `repos/`
-
-Pre-cloned source repos shared across all workspaces. Populated by `just clone-all`. Never edited directly.
-
-### Workspace `repos/`
-
-Symlinks to workbench `repos/<name>`. Gives agents read-only access to all source code for context.
-
-### Workspace `dev/`
-
-Git worktrees created from the source repos. Each worktree gets its own branch (`YYYYMMDD-<ws-name>/<repo-name>`). These are editable and dev-installed via `uv add --editable`.
-
-### Workspace `tmp/`
-
-Git worktrees for reading specific branches. Created by `just checkout-repo <name> <branch>`. Not dev-installed.
+- **Workbench `repos/`** — pre-cloned source repos shared across workspaces. Populated by `just repos clone`. `repos clone` also sets `remote.origin.gh-resolved=base` so `gh pr checkout` resolves non-interactively.
+- **Workspace `repos/`** — symlinks to the workbench `repos/<name>`; read-only context.
+- **Workspace `dev/`** — worktrees created from the source repos, each on its own branch `YYYYMMDD-<ws>/<repo>`, added as editable members. `just dev add` creates them (no sync); `just dev setup` runs `uv sync` + enables extensions. PR checkouts land on the workspace-scoped branch (`gh pr checkout --branch`).
+- **Workspace `tmp/`** — worktrees for reading specific branches (`just dev checkout <repo> [branch]`). Not dev-installed.
 
 ## Clean git state
 
-Workspace artifacts are gitignored via `.gitignore`:
-
-- `.workspace_info.json`, `.venv/`, `uv.lock`, `screenshots/`, `.env`
-- `repos/`, `dev/`, `tmp/`
+Workspace artifacts are gitignored: `.workspace_info.json`, `.venv/`, `uv.lock`,
+`screenshots/`, `.env`, `pyproject.toml`, `repos/`, `dev/`, `tmp/`.
 
 ## `repos.json`
 
-Maps repo names to git URLs and optional package metadata. See `repos.schema.json` for the full schema.
+Maps repo names to git URLs and optional package metadata. See `repos.schema.json`.
 
 Default conventions when `packages` is absent:
 - `name` = repo key with `-` replaced by `_`
@@ -72,24 +76,32 @@ Default conventions when `packages` is absent:
 
 ## `.workspace_info.json`
 
-Tracks dev-installed repos and runtime state:
+Runtime state only (which repos are dev-installed is determined by scanning `./dev`):
 
 ```json
 {
-  "dev-repos": { "jupyter-ai-router": {}, "jupyter-chat": { "pr-number": 42 } },
-  "prompt": "",
-  "agent": { "pgid": 12350 },
-  "server": { "surface_id": "...", "url": "...", "token": "...", "pid": 12345, "pgid": 12340 },
-  "browser": { "surface_id": "..." }
+  "server": null,
+  "browser": null,
+  "agent": { "pgid": 12350 }
 }
 ```
 
-## Browser Eval Scripts (`scripts/`)
+`agent` is managed by `spawn-agent`/`stop-agent`; `server`/`browser` by the
+(deprecated) server/browser modules.
 
-JS function expressions for `just browser-eval`. Return `'ERROR: ...'` to signal failure.
+## Tests
+
+bats tests live in `workbench-tests/` (`ws.bash`, `dev.bash`, `repos.bash`, shared
+`helpers.bash`). Run with `just workbench-tests run-all` or `just workbench-tests run <file>`.
+Tests are hermetic (no network): `dev` tests use a local fake source repo, and they
+create throwaway workspaces, cleaning up worktrees/branches/trash in teardown. Add
+coverage when you change recipes, and commit before running — workspace worktrees are
+created from `HEAD`, so uncommitted recipe changes won't be seen by tests that run
+`just` from inside a worktree.
 
 ## Adding a new recipe
 
-1. Add the appropriate `[group('...')]` attribute
-2. Use `root="{{ root }}"` at the top of bash blocks
-3. Use inline `jq` for `.workspace_info.json`
+1. Put it in the right module file (`repos/justfile`, `dev/justfile`, `workspaces/justfile`, or the root `justfile`).
+2. Mark it `[no-cd]` and assign `root="{{ root }}"` at the top of bash blocks.
+3. Use inline `jq` for `.workspace_info.json`.
+4. Add a bats test under `workbench-tests/`.
