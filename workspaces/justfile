@@ -77,6 +77,62 @@ create name then_cmd="":
     echo "✓ Workspace '$name' created at: $ws"
     echo "✓ Branch: $branch"
 
+# Reset a workspace's worktree branch onto the latest workbench main
+[no-cd]
+[arg("name", help="workspace name (defaults to the current directory)")]
+rebase name="":
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    name="{{ name }}"
+
+    # Default to the invocation directory's workspace
+    [[ -z "$name" ]] && name=$(basename "$(pwd)")
+    ws="$root/workspaces/$name"
+    if [[ ! -d "$ws" ]]; then
+        echo "Error: workspace '$name' not found at $ws" >&2
+        exit 1
+    fi
+
+    # 1. Refuse on uncommitted tracked changes (untracked files survive the
+    #    branch switch, so they don't block — listed as an FYI).
+    dirty=$(git -C "$ws" status --porcelain --untracked-files=no)
+    if [[ -n "$dirty" ]]; then
+        echo -e "\033[1;31mAborting: workspace '$name' has uncommitted changes.\033[0m" >&2
+        echo "$dirty" >&2
+        echo "Commit, stash, or discard them, then run 'just ws rebase' again." >&2
+        exit 1
+    fi
+
+    # 2. Fetch the latest main from the remote it tracks (fallback: first remote).
+    remote=$(git -C "$ws" config branch.main.remote 2>/dev/null || true)
+    [[ -z "$remote" ]] && remote=$(git -C "$ws" remote | head -1)
+    git -C "$ws" fetch "$remote"
+
+    # 3. Safety: a squash-merge collapses the branch's commits into one, so a
+    #    commit-based "ahead" check would false-positive. Compare TREES instead —
+    #    if the worktree's content already matches main, all its work has landed
+    #    and the reset is safe. Otherwise there's un-landed content; abort.
+    if ! git -C "$ws" diff --quiet "$remote/main" HEAD; then
+        echo -e "\033[1;31mAborting: '$name' has changes not in $remote/main.\033[0m" >&2
+        git -C "$ws" diff --stat "$remote/main" HEAD >&2
+        echo "Land these (open + merge a PR) before rebasing, or discard them." >&2
+        exit 1
+    fi
+
+    # 4. Reset the worktree onto a fresh dated branch off main.
+    oldbranch=$(git -C "$ws" rev-parse --abbrev-ref HEAD)
+    newbranch="$(date +%Y%m%d)-$name"
+    if git -C "$ws" show-ref --verify --quiet "refs/heads/$newbranch"; then
+        newbranch="$newbranch-$(date +%H%M%S)"
+    fi
+    git -C "$ws" switch -c "$newbranch" "$remote/main"
+
+    # 5. Delete the old branch (we've switched away from it).
+    [[ "$oldbranch" != "$newbranch" ]] && git -C "$ws" branch -D "$oldbranch" 2>/dev/null || true
+
+    echo "✓ '$name' reset onto '$newbranch' (off $remote/main); was '$oldbranch'"
+
 # Remove a workspace (fast: instant rename + background delete)
 [no-cd]
 rm name:
