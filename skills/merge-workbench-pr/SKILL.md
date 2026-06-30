@@ -1,25 +1,27 @@
 ---
-name: merge-and-rebase
-description: Merge an approved workbench PR and reset this workspace onto the latest main. Use when the user approves a workbench PR — "I approve this workbench PR", "merge and rebase", "land this PR".
+name: merge-workbench-pr
+description: Merge an approved workbench PR, then always rebase this workspace onto the latest main. Use when the user approves a workbench PR — "I approve this workbench PR", "merge this PR", "land this PR".
 ---
 
-# Merge and Rebase
+# Merge Workbench PR
 
 The user has approved this workspace's workbench PR. Merge it, update the root
-workbench's main, then reset this worktree onto the fresh main.
+workbench's main, then **always** rebase this worktree onto the fresh main.
 
 ## When to use
 
-Trigger phrases: "I approve this workbench PR", "merge and rebase", "land this".
+Trigger phrases: "I approve this workbench PR", "merge this PR", "land this".
 Run from inside the workspace whose PR was approved.
 
 ## How
 
-Two commands, in order:
+Two commands, in order. **Always run `just ws rebase` after merging** — a merged
+workspace branch is stale, and rebasing recycles the worktree onto the new main
+so further work starts from a clean, up-to-date base.
 
 ```bash
 just workbench merge <pr-number>   # squash-merge the PR, delete its branch, update root main
-just ws rebase                     # reset THIS worktree onto the updated main
+just ws rebase                     # ALWAYS run this next: reset THIS worktree onto the updated main
 ```
 
 ### `just workbench merge <pr-number>`
