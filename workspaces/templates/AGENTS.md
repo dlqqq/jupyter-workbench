@@ -1,82 +1,60 @@
 # Workspace Agent Guide
 
-You are a worker agent assigned to a task inside a workspace. Stay in your workspace. If you need another package, use `just add-dev`. If you need parallelism, use built-in subagent capabilities. Do NOT spawn new workspaces from within a workspace.
+You are a worker agent assigned to a task inside a workspace. Your workspace is a **git worktree** of the workbench repo on branch `YYYYMMDD-<name>`. Your venv is already activated. Stay in your workspace. If you need another package, use `just dev add`. Do NOT spawn new workspaces from within a workspace.
+
+## What you can do from this workspace
+
+1. **Edit dev-installed packages** — make changes in `dev/<repo>` and open PRs to their upstream repos.
+2. **Edit workbench infrastructure** — modify justfiles, skills, docs, or templates and open a PR to the workbench repo.
+
+Up to **N+1 PRs** from a single workspace: 1 for the workbench + N for each dev-installed package.
+
+## Repo directories
+
+| Directory | Purpose |
+|-----------|---------|
+| `repos/` | Symlinks → read-only context. Browse source here, never edit. |
+| `dev/` | Worktrees for editing. Dev-installed, push PRs from here. |
+| `tmp/` | Worktrees for reading specific branches (`just dev checkout <repo> [branch]`). |
 
 ## General workflow
 
-> Instructions in your prompt and PLAN.md always take precedence. This is just a sketch of a typical workflow.
+> Instructions in your prompt and PLAN.md always take precedence.
 
-1. **Understand and reproduce the issue.** Before writing code, make sure you understand the problem and have a way to verify your fix.
-   - For frontend issues: check if the repo has E2E tests (`**/ui-tests/**/*`). If there are >1 existing E2E tests (not just boilerplate), add a failing E2E test to reproduce. Otherwise, use the cmux browser to reproduce visually.
-   - For backend issues: try reproducing with a failing pytest first.
-   - Start the server if it helps reproduce: `just start-server`
-   - If you can't reliably reproduce (e.g., Windows-only issue on a macOS machine, Firefox-only issue in Safari/WKWebView), skip reproduction and note why. It's OK to ask for help.
+1. **Understand and reproduce the issue.** Prefer a failing test as your repro:
+   - **Backend** (`.py`): write a failing `pytest` against `dev/<repo>`.
+   - **Frontend** (`.ts`/`.tsx`/`.css`): if the repo has an E2E (Galata) suite, add a failing E2E test; otherwise add the best unit/integration test you can.
 
 2. **Work on the fix.** After making changes:
-   - Frontend changes (`.ts`, `.tsx`, `.css`): use the `rebuild-frontend` skill
-   - Backend changes (`.py`): run `just restart-server`
-   - **Keep screenshots** in `screenshots/` — do NOT delete them. They serve as evidence of testing and may be used in the PR description later.
+   - **Frontend**: rebuild before running E2E tests — `(cd dev/<repo> && jlpm build)` (see the `rebuild-frontend` skill).
+   - **Backend**: the editable install picks up `.py` changes automatically — just re-run the tests.
 
-3. **Add test coverage.** Ensure at least unit/integration level tests cover your change. Skipping E2E tests is fine if the repo doesn't already have E2E test infrastructure to build off of.
+3. **Add test coverage.** At least unit/integration level. Add an E2E (Galata) test when the repo supports it.
 
-4. **Verify with static analysis.** Run from inside the repo:
+4. **Verify.** Run from inside the dev repo (venv is already active):
    ```bash
-   just mypy
-   just lint
-   just pytest
+   cd dev/<repo-name>
+   pytest
+   jlpm lint      # frontend repos
+   mypy .         # if the repo uses mypy
    ```
 
 5. **Notify the user.**
    - Done: `cmux notify --title "Done: <workspace>" --body "<brief summary>"`
    - Stuck: `cmux notify --title "Stuck: <workspace>" --body "<what's blocking>"`
 
-## Sign-off steps (only when asked)
+## Git tips
 
-When the user asks you to sign off or clean up:
-
-1. **Stop the server** — run `just stop-server` from the workspace root.
-
-2. **Close extra surfaces** — close any surfaces created during the task (server terminal, browser):
-   ```bash
-   cmux close-surface --surface $SERVER_SURFACE
-   cmux close-surface --surface $BROWSER_SURFACE
-   ```
-
-3. **Leave only the agent's own terminal** (the one running `kiro-cli chat`).
-
-## Recipes
-
-Run `just list-recipes` to see all available recipes.
-
-### Workspace recipes
-
-| Recipe | Description |
-|--------|-------------|
-| `start-server` | Start JupyterLab + open browser |
-| `stop-server` | Stop the server |
-| `restart-server` | Restart the server |
-| `add-dev <repos>` | Clone + dev-install repos (comma-separated) |
-| `add <pkgs>` | Add PyPI packages (comma-separated) |
-| `build-all` | Build all dev repos |
-| `enable-all-extensions` | Enable extensions for all dev repos |
-
-### Repo recipes (run from inside a repo)
-
-| Recipe | Description |
-|--------|-------------|
-| `build` | Rebuild frontend |
-| `lint` | Run linters |
-| `pytest` | Run tests |
-| `mypy` | Run type checker |
-| `ensure-fork` | Create GitHub fork |
+- Workspace artifacts (`.venv/`, `repos/`, `dev/`, `tmp/`, `.workspace_info.json`, `pyproject.toml`) are gitignored.
+- Only intentional workbench changes show in `git status`.
+- For workbench PRs, commit and push from the worktree root.
+- For package PRs, commit and push from inside `dev/<repo-name>/` (use `just dev ensure-fork <repo>` first).
 
 ## Quick Reference
 
 | Situation | Where to look |
 |-----------|---------------|
-| Made frontend changes (`.ts`, `.tsx`, `.css`) | `.kiro/skills/rebuild-frontend/SKILL.md` |
-| Made backend changes (`.py`) | Run `just restart-server` |
-| Need to read server logs | `.kiro/skills/read-jupyter-server-logs/SKILL.md` |
-| Need to interact with Jupyter Chat in the browser | `.kiro/skills/jupyter-chat-browser-use/SKILL.md` |
-| Need to run JupyterLab commands programmatically | `.kiro/skills/run-jupyterlab-command/SKILL.md` |
+| Made frontend changes (`.ts`/`.tsx`/`.css`) | `.kiro/skills/rebuild-frontend/SKILL.md` |
+| Made backend changes (`.py`) | Re-run `pytest` (editable install is live) |
+| Need to dev-install another repo | `just dev add <repo>` then `just dev setup` |
 | Need to open a pull request | `.kiro/skills/open-pr/SKILL.md` |

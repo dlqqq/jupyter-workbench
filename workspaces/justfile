@@ -1,0 +1,189 @@
+root := justfile_directory()
+
+# Create a new workspace
+[no-cd]
+[arg("name", help="workspace name")]
+[arg("then_cmd", long="then", help="command to run in the new cmux workspace")]
+create name then_cmd="":
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    cd "$root"
+
+    name="{{ name }}"
+
+    ws="$root/workspaces/$name"
+    if [[ -d "$ws" ]]; then
+        echo "Error: workspace '$name' already exists at $ws" >&2
+        exit 1
+    fi
+
+    # Create workspace as a git worktree with a dated branch
+    branch="$(date +%Y%m%d)-$name"
+    git worktree add -b "$branch" "$ws"
+
+    # Generate pyproject.toml with the workspace name as the venv/project name
+    sed "s/^name = .*/name = \"$name\"/" "$root/workspaces/templates/pyproject.toml" > "$ws/pyproject.toml"
+
+    # Create an empty venv so the workspace is immediately activatable
+    # (`dev setup`'s `uv sync` later reuses it). Fast: no packages installed.
+    (cd "$ws" && uv venv >/dev/null)
+
+    # Symlink all repos into workspace repos/ for read-only context
+    mkdir -p "$ws/repos"
+    while IFS= read -r rname; do
+        if [[ -d "$root/repos/$rname" ]]; then
+            ln -sf "$root/repos/$rname" "$ws/repos/$rname"
+        fi
+    done < <(jq -r 'keys[]' "$root/repos.json")
+
+    # Write runtime-only workspace info
+    jq -n '{"server": null, "browser": null, "agent": null}' > "$ws/.workspace_info.json"
+
+    # Copy .env if present
+    [[ -f "$root/.env" ]] && cp "$root/.env" "$ws/.env"
+
+    then_cmd="{{ then_cmd }}"
+
+    # Open in cmux if available, otherwise print instructions.
+    # In both cases the venv is activated first (it was created by `uv venv` above).
+    if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
+        if [[ -n "$then_cmd" ]]; then
+            cmd="source .venv/bin/activate && $then_cmd"
+        else
+            cmd="source .venv/bin/activate"
+        fi
+        # --command sends text+Enter to the new workspace's terminal, so the
+        # activation persists in the interactive shell.
+        cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$cmd")
+        echo "✓ Opened cmux workspace: $cmux_ws"
+    else
+        echo ""
+        echo "in a new terminal, run"
+        echo ""
+        echo "cd workspaces/$name"
+        echo "source .venv/bin/activate"
+        echo "${then_cmd:-just dev setup}"
+        echo ""
+    fi
+
+    echo "✓ Workspace '$name' created at: $ws"
+    echo "✓ Branch: $branch"
+
+# Remove a workspace (fast: instant rename + background delete)
+[no-cd]
+rm name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    name="{{ name }}"
+    if [[ ! -d "$root/workspaces/$name" ]]; then
+        echo "Error: workspace '$name' not found" >&2
+        exit 1
+    fi
+    just ws _trash "$name"
+    just ws _sweep
+    echo "✓ Removed workspace '$name'; cleanup running in background"
+
+# Instant-move a workspace to trash, prune its worktree registration, delete its branch
+[no-cd]
+[private]
+_trash name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    name="{{ name }}"
+    ws="$root/workspaces/$name"
+
+    # Stop server + agent if running
+    for key in server agent; do
+        pgid=$(jq -r --arg k "$key" '.[$k].pgid // empty' "$ws/.workspace_info.json" 2>/dev/null || true)
+        [[ -n "$pgid" ]] && kill -TERM -- -"$pgid" 2>/dev/null || true
+    done
+
+    # Capture the branch, then instant-move to trash (same volume → O(1))
+    branch=$(git -C "$ws" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    trash="$root/workspaces/.trash"
+    mkdir -p "$trash"
+    mv "$ws" "$trash/$name-$(date +%s)-$$"
+
+    # Prune the now-stale workbench worktree registration + delete the branch
+    git -C "$root" worktree prune
+    [[ -n "$branch" && "$branch" != "HEAD" ]] && git -C "$root" branch -D "$branch" 2>/dev/null || true
+    echo "✓ Trashed workspace '$name' (branch: ${branch:-none})"
+
+# Background-delete the trash dir, then prune dev/tmp worktrees from source repos
+[no-cd]
+[private]
+_sweep:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    trash="$root/workspaces/.trash"
+    [[ -d "$trash" ]] || exit 0
+    nohup bash -c "
+        rm -rf '$trash'/* 2>/dev/null || true
+        for r in '$root'/repos/*/; do
+            [ -e \"\$r/.git\" ] && git -C \"\$r\" worktree prune 2>/dev/null || true
+        done
+    " >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+
+# Delete all workspaces not currently open in cmux
+[no-cd]
+cleanup:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+
+    if [[ -z "${CMUX_WORKSPACE_ID:-}" ]]; then
+        echo "Error: cleanup requires cmux (it determines which workspaces are open)." >&2
+        exit 1
+    fi
+
+    # Get names of open cmux workspaces
+    open_ws=()
+    while IFS= read -r title; do
+        if [[ "$title" == "[ws] "* ]]; then
+            open_ws+=("${title#\[ws\] }")
+        fi
+    done < <(cmux list-workspaces --json | jq -r '.workspaces[].title')
+
+    # Find workspaces not open in cmux
+    ws_to_delete=()
+    for ws in "$root"/workspaces/*/; do
+        [[ -d "$ws" ]] || continue
+        name=$(basename "$ws")
+        [[ "$name" == "templates" || "$name" == ".trash" ]] && continue
+        found=false
+        for open in "${open_ws[@]}"; do
+            [[ "$name" == "$open" ]] && found=true && break
+        done
+        [[ "$found" == "false" ]] && ws_to_delete+=("$name")
+    done
+
+    if [[ ${#ws_to_delete[@]} -eq 0 ]]; then
+        echo "Nothing to clean up."
+        exit 0
+    fi
+
+    echo -e "\033[1;33mWARNING: This will delete all workspaces not currently open in cmux.\033[0m"
+    echo ""
+    echo "Workspaces to delete:"
+    for name in "${ws_to_delete[@]}"; do
+        echo "├── $name"
+    done
+    echo ""
+
+    read -p "Continue? [y/N] " answer
+    if [[ ! "$answer" =~ ^[Yy] ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+
+    # Instant-trash each workspace, then one background sweep
+    for name in "${ws_to_delete[@]}"; do
+        just ws _trash "$name"
+    done
+    just ws _sweep
+    echo "✓ Removed ${#ws_to_delete[@]} workspace(s); cleanup running in background"

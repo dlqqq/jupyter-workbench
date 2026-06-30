@@ -11,11 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: extractions/setup-just@v2
-      - name: Parse all justfiles
-        run: |
-          just --list
-          just --list --justfile workspace.just
-          just --list --justfile repo.just
+      - name: Parse all justfiles (root + submodules)
+        run: just --list --list-submodules
 
   validate-repos-json:
     runs-on: ubuntu-latest
@@ -36,63 +33,17 @@ jobs:
             )
           ' repos.json
 
-  test-workspace-lifecycle:
+  workbench-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: extractions/setup-just@v2
       - uses: astral-sh/setup-uv@v4
-      - name: Create workspace (template only)
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+      - name: Configure git (worktree/branch ops need an identity)
         run: |
-          # Manually replicate the template-copy portion of create-workspace
-          # (the full recipe requires git clone + cmux which aren't available in CI)
-          mkdir -p workspaces/ci-test
-          cp workspaces/templates/* workspaces/ci-test/
-          ln -sf "$PWD/workspace.just" workspaces/ci-test/justfile
-      - name: Verify workspace files exist
-        run: |
-          test -f workspaces/ci-test/AGENTS.md
-          test -f workspaces/ci-test/jupyter_server_config.py
-          test -f workspaces/ci-test/pyproject.toml
-          test -L workspaces/ci-test/justfile
-          # Verify justfile symlink target is valid
-          just --list --justfile workspaces/ci-test/justfile
-      - name: Remove workspace
-        run: rm -rf workspaces/ci-test
-      - name: Verify removal
-        run: test ! -d workspaces/ci-test
-
-  test-remove-worktree-flags:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: extractions/setup-just@v2
-      - name: Setup test worktrees
-        run: |
-          git config user.email "ci@test"
+          git config user.email "ci@example.com"
           git config user.name "CI"
-          for name in wt1 wt2 wt3; do
-            git worktree add -b "$name" "worktrees/$name"
-          done
-      - name: "Test: remove by name"
-        run: |
-          just rmwt wt1 --force
-          test ! -d worktrees/wt1
-          test -d worktrees/wt2
-          test -d worktrees/wt3
-      - name: "Test: --except keeps listed, removes rest"
-        run: |
-          just rmwt --except wt2 --force
-          test -d worktrees/wt2
-          test ! -d worktrees/wt3
-      - name: "Test: remove last one by name"
-        run: |
-          just rmwt wt2 --force
-          test ! -d worktrees/wt2
-      - name: "Test: error when names + --except"
-        run: |
-          git worktree add -b wt4 worktrees/wt4
-          output=$(just rmwt wt4 --except wt4 2>&1 || true)
-          echo "$output" | grep -q "cannot be used with a names list"
-          git worktree remove worktrees/wt4 --force
-          git branch -D wt4
+      - name: Run workbench tests
+        run: just workbench-tests run-all

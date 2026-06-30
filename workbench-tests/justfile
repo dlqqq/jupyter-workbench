@@ -1,0 +1,11 @@
+root := justfile_directory()
+
+# Run all workbench tests
+[no-cd]
+run-all:
+    bats {{ root }}/workbench-tests/*.bash
+
+# Run a specific test file
+[no-cd]
+run file:
+    bats {{ root }}/workbench-tests/{{ file }}.bash

@@ -1,0 +1,29 @@
+root := justfile_directory()
+
+# Clone/fetch all repos from repos.json
+[no-cd]
+clone:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    mkdir -p "$root/repos"
+    while IFS= read -r repo_name; do
+        if [[ -d "$root/repos/$repo_name" ]]; then
+            echo "⟳ Fetching $repo_name..."
+            git -C "$root/repos/$repo_name" fetch --all --prune
+        else
+            url=$(jq -r --arg r "$repo_name" '.[$r].url' "$root/repos.json")
+            echo "⬇ Cloning $repo_name..."
+            git clone "$url" "$root/repos/$repo_name"
+        fi
+        # Mark origin as the gh default repo so `gh pr checkout` resolves
+        # non-interactively even after fork remotes accumulate on the shared clone.
+        just repos _set-default "$repo_name"
+    done < <(jq -r 'keys[]' "$root/repos.json")
+    echo "✓ All repos ready"
+
+# (internal) Set origin as the gh default base repo for the given cloned repo
+[no-cd]
+[private]
+_set-default repo_name:
+    git -C "{{ root }}/repos/{{ repo_name }}" config remote.origin.gh-resolved base

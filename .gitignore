@@ -1,12 +1,30 @@
-workspaces/*
-!workspaces/templates/
-worktrees/
-tmp/*
-!tmp/.gitkeep
+# Workspace artifacts
+.workspace_info.json
 .venv/
-node_modules/
+uv.lock
+screenshots/
 .env
+pyproject.toml
+
+# Repo directory contents (but track the justfile)
+repos/*
+!repos/justfile
+
+# Dev directory contents (but track the justfile)
+dev/*
+!dev/justfile
+
+# Tmp directory contents
+tmp/
+
+# General
+node_modules/
 *.egg-info/
 __pycache__/
-uv.lock
 **/PLAN.md
+
+# Workbench layout
+workspaces/*
+!workspaces/templates/
+!workspaces/justfile
+worktrees/
