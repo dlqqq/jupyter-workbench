@@ -1,29 +1,15 @@
-root := justfile_directory()
+checkout := justfile_directory()
 
-# Clone/fetch all repos from repos.json
+# Clone/fetch all repos from repos.json (parallel, live status board)
+# Env: REPOS_CLONE_JOBS = max concurrent git ops (default 8)
 [no-cd]
 clone:
     #!/usr/bin/env bash
     set -eo pipefail
-    root="{{ root }}"
-    mkdir -p "$root/repos"
-    while IFS= read -r repo_name; do
-        if [[ -d "$root/repos/$repo_name" ]]; then
-            echo "⟳ Fetching $repo_name..."
-            git -C "$root/repos/$repo_name" fetch --all --prune
-        else
-            url=$(jq -r --arg r "$repo_name" '.[$r].url' "$root/repos.json")
-            echo "⬇ Cloning $repo_name..."
-            git clone "$url" "$root/repos/$repo_name"
-        fi
-        # Mark origin as the gh default repo so `gh pr checkout` resolves
-        # non-interactively even after fork remotes accumulate on the shared clone.
-        just repos _set-default "$repo_name"
-    done < <(jq -r 'keys[]' "$root/repos.json")
-    echo "✓ All repos ready"
-
-# (internal) Set origin as the gh default base repo for the given cloned repo
-[no-cd]
-[private]
-_set-default repo_name:
-    git -C "{{ root }}/repos/{{ repo_name }}" config remote.origin.gh-resolved base
+    # The shared repos/ + repos.json live at the workbench ROOT and are shared
+    # across all workspaces, so resolve the root from git — justfile_directory()
+    # here would be the workspace when invoked from a worktree. Mirrors dev/ + ws.
+    root="$(git rev-parse --path-format=absolute --git-common-dir | xargs dirname)"
+    # Run this checkout's own copy of the script (a workspace tests its edits
+    # against the shared repos/); {{ checkout }} is this checkout's root.
+    exec bash "{{ checkout }}/scripts/repos-clone.sh" "$root"
