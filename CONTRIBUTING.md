@@ -100,6 +100,10 @@ coverage when you change recipes, and commit before running — workspace worktr
 created from `HEAD`, so uncommitted recipe changes won't be seen by tests that run
 `just` from inside a worktree.
 
+`just workbench verify --offline` is the hermetic entry point for checking
+prerequisites without touching GitHub (the SSH + `gh auth` checks become SKIP
+rows), so CI and bats can call it safely.
+
 ## Adding a new recipe
 
 1. Put it in the right module file (`repos/justfile`, `dev/justfile`, `workspaces/justfile`, or the root `justfile`).

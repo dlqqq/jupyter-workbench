@@ -13,7 +13,51 @@ A lightweight Jupyter extension development orchestrator. Create parallel worksp
 > and in remote/CI environments. The `server` and `browser` recipe modules below
 > are **deprecated** and will be replaced by Galata-based flows.
 
+## Prerequisites
+
+Run `just workbench verify` to check everything below at once.
+
+**Required tools** (must be on your `PATH`):
+
+| Tool | Why |
+|------|-----|
+| [`just`](https://github.com/casey/just) | The command runner — every workflow is a `just` recipe. Use a recent release (module + `[arg]` attribute support). |
+| `git` | Worktrees + `git rev-parse --path-format=absolute` root resolution. |
+| [`uv`](https://github.com/astral-sh/uv) | Venv + workspace/editable installs (needs `--no-sync` support; use a recent uv). |
+| `jq` | Reads `repos.json` and workspace-state JSON. |
+| [`gh`](https://cli.github.com) | Checking out, forking, opening, and merging PRs. |
+
+**Required auth / access:**
+
+- **A GitHub SSH key.** Every repo in `repos.json` uses a `git@github.com:` URL,
+  so `just repos clone` (and every `dev add`) clones over SSH. Verify with
+  `ssh -T git@github.com` — a "successfully authenticated" message means you're
+  set (it exits nonzero even on success; that's expected). No key → clone fails
+  with `Permission denied (publickey)`.
+- **`gh` logged in.** Run `gh auth status`; if not, `gh auth login`.
+- **git identity.** `git config --global user.name` / `user.email` must be set
+  so commits from `dev/<repo>` are attributed correctly.
+
+**Optional / auto-managed:**
+
+- **Python 3.10–3.13** — the venv interpreter. `uv` downloads a compatible
+  Python automatically if your system one is missing or out of range, so this is
+  not a hard requirement.
+- [`cmux`](https://github.com/cmux) — needed to auto-launch workspace agents and
+  to use the (deprecated) `server`/`browser` recipes. macOS-oriented; without
+  it, `ws create`/`ws spawn` print manual instructions instead (see the status
+  note above).
+- `bats` — only to run the workbench recipe test suite
+  (`just workbench-tests run-all`).
+
+**Config:** `workbench-config.json` (tracked) sets `agent-cmd` — the CLI used to
+launch workspace agents. The default is `claude --permission-mode auto`; that
+CLI (or your replacement) must be installed to spawn agents.
+
 ## Quick Start
+
+> First time? Run `just workbench verify` to confirm your setup (see
+> [Prerequisites](#prerequisites)).
 
 ```bash
 # Pre-clone all repos (one-time setup)
@@ -71,6 +115,7 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 
 | Recipe | Description |
 |--------|-------------|
+| `just workbench verify` | Check that all prerequisites (tools, auth, config) are satisfied |
 | `just repos clone` | Clone/fetch all repos into workbench `repos/` |
 | `just ws create <name>` | Create a new workspace (fast scaffold only) |
 | `just ws spawn <name>` | Run the workspace's `setup.sh` in its cmux workspace to provision + launch the agent (needs `setup.sh` + `PROMPT.md`) — _agent-invoked_ |
