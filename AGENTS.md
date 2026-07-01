@@ -42,8 +42,10 @@ has full repo context.
 
 To spawn a workspace agent for a task, follow `skills/spawn-workspace-agent/SKILL.md`.
 In short: grill only enough for a go/no-go decision (use the `grill-me` skill),
-pick the repos to dev-install, name the workspace, then `just ws create … --then …`
-and write a thin `PLAN.md`. You scaffold; you do **not** plan the implementation.
+pick the repos to dev-install, name the workspace, `just ws create <name>`, write
+`setup.sh` + `PROMPT.md` into the workspace (free-form text goes in files, never
+through a flag — `PROMPT.md` *is* the agent's prompt), then `just ws spawn <name>`
+to provision and launch. You scaffold; you do **not** plan the implementation.
 
 Trivial one-off workbench tweaks that need no iteration (a doc fix, a recipe
 one-liner) can be done here on `main` directly — but when in doubt, prefer a
@@ -54,10 +56,17 @@ workspace; it's cheap and keeps work isolated.
 **If your CWD is under `workspaces/`, you are the workspace agent** — the
 top-level agent for one task. Your job:
 
-1. **Understand the task** — read `PLAN.md`; gather context and research the
-   relevant repos. If anything is still unclear, grill the user (`grill-me`
-   skill) before writing code.
-2. **Plan** — expand `PLAN.md` into a concrete approach.
+0. **Verify your environment first.** Provisioning (`just dev setup`) runs just
+   before you launch, but it is **not** allowed to block your startup — so if it
+   failed (a version conflict, a bad `#pr` ref, a network flake), you'll have
+   launched into a half-provisioned venv. Before touching the task, confirm your
+   dev packages import; if they don't, the `dev add`/`dev setup` output is in your
+   terminal scrollback — read the error, fix its cause (e.g. adjust the package
+   list), and re-run `just dev setup` until the env is clean. Only then proceed.
+1. **Understand the task** — your prompt came from `PROMPT.md`; gather context
+   and research the relevant repos. If anything is still unclear, grill the user
+   (`grill-me` skill) before writing code.
+2. **Plan** — expand the task into a concrete approach.
 3. **Dispatch subagents** — drive work across repositories to completion, in
    parallel where it's independent (use subagents/workflows when capable). Point
    a subagent at the one skill it needs (e.g. `skills/open-pr/SKILL.md`) rather
@@ -73,7 +82,7 @@ What you can produce from a workspace:
 
 ### Workflow
 
-> Instructions in your prompt and `PLAN.md` always take precedence.
+> Instructions in your prompt (`PROMPT.md`) always take precedence.
 
 1. **Reproduce.** Prefer a failing test as your repro — `pytest` for backend
    (`.py`), a Galata E2E (or best available unit test) for frontend

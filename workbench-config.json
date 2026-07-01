@@ -1,0 +1,12 @@
+{
+  "$schema": "./workbench-config.schema.json",
+  "agent-cmd": "claude --permission-mode auto",
+  "_examples": {
+    "agent-cmd": [
+      "claude --permission-mode auto",
+      "claude --permission-mode acceptEdits",
+      "kiro-cli chat --agent dlq -a",
+      "codex"
+    ]
+  }
+}

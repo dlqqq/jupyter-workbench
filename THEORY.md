@@ -252,7 +252,7 @@ Cybernetics is the study of communication and control in complex systems. Three 
 |---|---|
 | Amplification | Skills, plans, recipes — human knowledge propagated across parallel agents |
 | Attenuation | Notifications on done/stuck — human doesn't watch agents work |
-| Meta-level steering | PLAN.md describes intent, not implementation |
+| Meta-level steering | PROMPT.md describes intent, not implementation |
 | Model of system | AGENTS.md, CONTRIBUTING.md, THEORY.md |
 | "Go See" (Gemba) | PR review — descend into code to verify steering worked |
 | Homeostasis | Worktrees adjust the system when it drifts; workspaces produce |

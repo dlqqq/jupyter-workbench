@@ -41,18 +41,6 @@ status:
         echo "  $(basename "$d")"
     done
 
-# Spawn an agent session with the given prompt
-spawn-agent prompt="":
-    #!/usr/bin/env bash
-    set -eo pipefail
-    root="{{ root }}"
-    pgid=$(ps -o pgid= -p $$ | tr -d ' ')
-    jq --arg pgid "$pgid" '.agent = {"pgid": ($pgid | tonumber)}' \
-        "$root/.workspace_info.json" > "$root/.workspace_info.json.tmp" \
-        && mv "$root/.workspace_info.json.tmp" "$root/.workspace_info.json"
-    source "$root/.venv/bin/activate"
-    exec kiro-cli chat --agent dlq -a {{ quote(prompt) }}
-
 # Stop the agent session
 stop-agent:
     #!/usr/bin/env bash

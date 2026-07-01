@@ -1,10 +1,9 @@
 root := justfile_directory()
 
-# Create a new workspace
+# Create a new workspace (scaffold only; provision with `just ws spawn <name>`)
 [no-cd]
 [arg("name", help="workspace name")]
-[arg("then_cmd", long="then", help="command to run in the new cmux workspace")]
-create name then_cmd="":
+create name:
     #!/usr/bin/env bash
     set -eo pipefail
     root="{{ root }}"
@@ -50,19 +49,17 @@ create name then_cmd="":
     # Copy .env if present
     [[ -f "$root/.env" ]] && cp "$root/.env" "$ws/.env"
 
-    then_cmd="{{ then_cmd }}"
-
-    # Open in cmux if available, otherwise print instructions.
-    # In both cases the venv is activated first (it was created by `uv venv` above).
+    # Open in cmux if available, otherwise print instructions. In both cases the
+    # venv is activated first (it was created by `uv venv` above). Provisioning is
+    # deliberately NOT run here — `ws create` only scaffolds. Write a setup.sh
+    # and PROMPT.md into the workspace, then run `just ws spawn <name>`. Keeping
+    # scaffold and provisioning separate means: (1) no free-form command crosses
+    # a shell-quoting boundary — setup.sh is a file; (2) no race between writing
+    # PROMPT.md and the agent reading it; (3) provisioning is re-runnable on failure.
     if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
-        if [[ -n "$then_cmd" ]]; then
-            cmd="source .venv/bin/activate && $then_cmd"
-        else
-            cmd="source .venv/bin/activate"
-        fi
         # --command sends text+Enter to the new workspace's terminal, so the
         # activation persists in the interactive shell.
-        cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "$cmd")
+        cmux_ws=$(cmux new-workspace --name "[ws] $name" --cwd "$ws" --command "source .venv/bin/activate")
         echo "✓ Opened cmux workspace: $cmux_ws"
     else
         echo ""
@@ -70,12 +67,97 @@ create name then_cmd="":
         echo ""
         echo "cd workspaces/$name"
         echo "source .venv/bin/activate"
-        echo "${then_cmd:-just dev setup}"
+        echo "just dev setup"
         echo ""
     fi
 
     echo "✓ Workspace '$name' created at: $ws"
     echo "✓ Branch: $branch"
+    echo "→ Next: write workspaces/$name/{setup.sh,PROMPT.md}, then run 'just ws spawn $name'"
+
+# Provision + launch the agent by running the workspace's setup.sh (needs setup.sh + PROMPT.md)
+[no-cd]
+[arg("name", help="workspace name")]
+spawn name:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    name="{{ name }}"
+    ws="$root/workspaces/$name"
+
+    if [[ ! -d "$ws" ]]; then
+        echo "Error: workspace '$name' not found at $ws" >&2
+        exit 1
+    fi
+    # Require both handoff files up front — fail fast before touching cmux.
+    for f in setup.sh PROMPT.md; do
+        if [[ ! -f "$ws/$f" ]]; then
+            echo "Error: no $f in workspace '$name'." >&2
+            echo "  Write $ws/$f first, then re-run 'just ws spawn $name'." >&2
+            exit 1
+        fi
+    done
+
+    # Hand off to the workspace's setup.sh — a file, so no command text is ever
+    # passed through a flag. It provisions (dev add/setup) and ends by launching
+    # the agent via `just ws _launch-agent`. In cmux, run it in the workspace's
+    # own terminal so the agent lives in that interactive session.
+    if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
+        ref=$(cmux list-workspaces --json | jq -r --arg t "[ws] $name" '.workspaces[] | select(.title == $t) | .ref' | head -1)
+        if [[ -z "$ref" ]]; then
+            echo "Error: no open cmux workspace titled '[ws] $name'." >&2
+            echo "  Run 'just ws create $name' first (it opens the cmux workspace)." >&2
+            exit 1
+        fi
+        # Trailing \n submits the line (cmux send does NOT append Enter on its own).
+        cmux send --workspace "$ref" 'source .venv/bin/activate && bash setup.sh\n'
+        echo "✓ Sent setup.sh to cmux workspace '$ref' ([ws] $name)"
+    else
+        cd "$ws"
+        source .venv/bin/activate
+        bash setup.sh
+    fi
+
+# Launch the agent CLI (workbench-config.json's agent-cmd) with PROMPT.md as its
+# prompt. Runs INSIDE the workspace, invoked by setup.sh — not for direct use.
+[no-cd]
+[private]
+_launch-agent:
+    #!/usr/bin/env bash
+    set -eo pipefail
+
+    # This runs from inside the workspace worktree, so the workspace root is the
+    # git toplevel (justfile_directory() here would be the workbench workspaces/).
+    ws=$(git rev-parse --show-toplevel)
+
+    if [[ ! -f "$ws/PROMPT.md" ]]; then
+        echo "Error: no PROMPT.md in this workspace ($ws)." >&2
+        echo "  Write PROMPT.md (the agent's task + handoff context) first." >&2
+        exit 1
+    fi
+
+    # The agent CLI is configured in workbench-config.json (tracked, so it's
+    # present in every worktree). No fallback: a missing agent-cmd is a real bug.
+    config="$ws/workbench-config.json"
+    agent_cmd=$(jq -re '."agent-cmd"' "$config" 2>/dev/null) || {
+        echo "Error: no \"agent-cmd\" in $config." >&2
+        echo "  Define it, e.g. \"agent-cmd\": \"claude --permission-mode auto\"." >&2
+        exit 1
+    }
+
+    # The prompt IS the file — free-form text goes to disk, never through a flag.
+    # It's appended as the agent CLI's final positional argument (the prompt/INPUT).
+    prompt=$(cat "$ws/PROMPT.md")
+
+    pgid=$(ps -o pgid= -p $$ | tr -d ' ')
+    jq --arg pgid "$pgid" '.agent = {"pgid": ($pgid | tonumber)}' \
+        "$ws/.workspace_info.json" > "$ws/.workspace_info.json.tmp" \
+        && mv "$ws/.workspace_info.json.tmp" "$ws/.workspace_info.json"
+    source "$ws/.venv/bin/activate"
+
+    # Word-split agent-cmd into command + flags, then append the prompt as one arg.
+    read -ra agent_argv <<< "$agent_cmd"
+    exec "${agent_argv[@]}" "$prompt"
 
 # Reset a workspace's worktree branch onto the latest workbench main
 [no-cd]

@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "jupyter-workbench workbench-config.json",
+  "description": "Workbench-wide configuration. Currently defines the agent CLI that the workspace agent launcher (`just ws _launch-agent`, invoked via `ws spawn` → setup.sh) runs.",
+  "type": "object",
+  "required": ["agent-cmd"],
+  "properties": {
+    "agent-cmd": {
+      "type": "string",
+      "description": "Command that launches the workspace agent CLI. Run as `<agent-cmd> \"<PROMPT.md contents>\"` — the prompt is appended as the final positional argument. Examples: 'claude --permission-mode auto', 'kiro-cli chat --agent dlq -a', 'codex'."
+    },
+    "_examples": {
+      "type": "object",
+      "description": "Non-functional reference examples, ignored by the tooling."
+    }
+  }
+}
