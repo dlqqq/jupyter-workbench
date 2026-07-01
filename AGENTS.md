@@ -56,6 +56,13 @@ workspace; it's cheap and keeps work isolated.
 **If your CWD is under `workspaces/`, you are the workspace agent** — the
 top-level agent for one task. Your job:
 
+0. **Verify your environment first.** Provisioning (`just dev setup`) runs just
+   before you launch, but it is **not** allowed to block your startup — so if it
+   failed (a version conflict, a bad `#pr` ref, a network flake), you'll have
+   launched into a half-provisioned venv. Before touching the task, confirm your
+   dev packages import; if they don't, the `dev add`/`dev setup` output is in your
+   terminal scrollback — read the error, fix its cause (e.g. adjust the package
+   list), and re-run `just dev setup` until the env is clean. Only then proceed.
 1. **Understand the task** — your prompt came from `PROMPT.md`; gather context
    and research the relevant repos. If anything is still unclear, grill the user
    (`grill-me` skill) before writing code.

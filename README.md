@@ -48,6 +48,20 @@ just dev checkout jupyter-chat feature-branch
   - `tmp/` — worktrees for reading specific branches
 - From a single workspace, you can open up to **N+1 PRs**: 1 for the workbench itself + N for each dev-installed package
 
+## Configuration
+
+`workbench-config.json` (at the workbench root, version-controlled) holds
+workbench-wide settings. Today it defines `agent-cmd` — the CLI that `just ws
+spawn` launches for the workspace agent, with `PROMPT.md`'s contents appended as
+the final argument:
+
+```json
+{ "agent-cmd": "claude --permission-mode auto" }
+```
+
+Swap it for another agent CLI as long as it takes the prompt as a trailing
+positional argument, e.g. `"kiro-cli chat --agent dlq -a"` or `"codex"`.
+
 ## Recipes
 
 Recipes are organized into modules. Run `just --list --list-submodules` to see everything.

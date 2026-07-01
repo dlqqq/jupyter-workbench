@@ -94,6 +94,28 @@ teardown() { wb_teardown; }
     [[ "$output" == *"PROMPT.md"* ]]
 }
 
+@test "ws spawn launches the configured agent-cmd with PROMPT.md as its prompt" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    printf 'SENTINEL-PROMPT-BODY\n' > "$TEST_WS/PROMPT.md"
+    # Point agent-cmd at a harmless command that echoes its args, so the exec'd
+    # process prints the prompt instead of launching a real agent CLI. The
+    # workspace is a worktree, so it has its own copy of workbench-config.json.
+    printf '{ "agent-cmd": "echo AGENT-LAUNCHED" }\n' > "$TEST_WS/workbench-config.json"
+    run bash -c "cd '$TEST_WS' && just ws spawn"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"AGENT-LAUNCHED"* ]]
+    [[ "$output" == *"SENTINEL-PROMPT-BODY"* ]]
+}
+
+@test "ws spawn errors when agent-cmd is missing from config" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    printf 'body\n' > "$TEST_WS/PROMPT.md"
+    printf '{ "something-else": true }\n' > "$TEST_WS/workbench-config.json"
+    run bash -c "cd '$TEST_WS' && just ws spawn"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"agent-cmd"* ]]
+}
+
 @test "ws setup errors when the workspace is missing" {
     run just ws setup "no-such-ws-xyz"
     [ "$status" -ne 0 ]

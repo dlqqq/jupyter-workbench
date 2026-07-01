@@ -131,8 +131,17 @@ spawn:
         exit 1
     fi
 
+    # The agent CLI is configured in workbench-config.json (tracked, so it's
+    # present in every worktree). No fallback: a missing agent-cmd is a real bug.
+    config="$ws/workbench-config.json"
+    agent_cmd=$(jq -re '."agent-cmd"' "$config" 2>/dev/null) || {
+        echo "Error: no \"agent-cmd\" in $config." >&2
+        echo "  Define it, e.g. \"agent-cmd\": \"claude --permission-mode auto\"." >&2
+        exit 1
+    }
+
     # The prompt IS the file — free-form text goes to disk, never through a flag.
-    # We pass it as the agent CLI's positional INPUT (kiro-cli's [INPUT] arg).
+    # It's appended as the agent CLI's final positional argument (the prompt/INPUT).
     prompt=$(cat "$ws/PROMPT.md")
 
     pgid=$(ps -o pgid= -p $$ | tr -d ' ')
@@ -140,7 +149,10 @@ spawn:
         "$ws/.workspace_info.json" > "$ws/.workspace_info.json.tmp" \
         && mv "$ws/.workspace_info.json.tmp" "$ws/.workspace_info.json"
     source "$ws/.venv/bin/activate"
-    exec kiro-cli chat --agent dlq -a "$prompt"
+
+    # Word-split agent-cmd into command + flags, then append the prompt as one arg.
+    read -ra agent_argv <<< "$agent_cmd"
+    exec "${agent_argv[@]}" "$prompt"
 
 # Reset a workspace's worktree branch onto the latest workbench main
 [no-cd]

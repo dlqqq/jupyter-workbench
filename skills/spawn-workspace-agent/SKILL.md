@@ -92,9 +92,14 @@ launching the agent:
 
 ```bash
 #!/usr/bin/env bash
-set -eo pipefail
+set -uo pipefail   # NOT -e: provisioning failures must not block the launch
+
 just dev add <repos>
 just dev setup [--with=<pkgs>]
+
+# Always reach the agent, even if provisioning failed above. The agent verifies
+# its env on startup (AGENTS.md step 0) and can fix + re-run `just dev setup` —
+# recovering in-context beats leaving a dead workspace for a human to notice.
 just ws spawn
 ```
 
@@ -102,7 +107,9 @@ just ws spawn
 - `--with=<pkgs>` — optional comma-separated PyPI packages (passed to `dev setup`)
 - `dev add` creates the worktrees + editable members; `dev setup` syncs the venv
   and enables extensions; `ws spawn` reads `PROMPT.md` and launches the agent CLI
-  with it as the prompt (no prompt argument is passed on the command line).
+  (from `workbench-config.json`'s `agent-cmd`) with the prompt as its final arg.
+- **Do not use `set -e`** — if `dev setup` aborts, we still want `ws spawn` to
+  run so the agent can diagnose the failure from its scrollback and recover.
 
 Write `PROMPT.md` to the workspace root — this **is** the agent's prompt
 (`ws spawn` passes its contents verbatim to the agent CLI). Open with the worker
