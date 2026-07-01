@@ -25,7 +25,21 @@ doubt, gather context in the workspace, not at the root.
 
 ## Workflow
 
-### Step 0: Grill (lightly) for go/no-go
+### Step 0: Clone/refresh all repos
+
+Before scaffolding any workspace, run `just repos clone` from the workbench root:
+
+```bash
+just repos clone
+```
+
+This clones every repo in `repos.json` that isn't present yet and fetches the
+rest, so `ws create` (which symlinks repos into the workspace) and `dev add`
+(which worktrees from the repo at the workbench root) always have what they need.
+It's idempotent and safe to run every time — do it once up front, even when
+spawning several agents in a row.
+
+### Step 1: Grill (lightly) for go/no-go
 
 Use the `grill-me` skill to surface ambiguity — but only enough to decide
 whether to spawn and what to scaffold. If the task needs **a lot** of
@@ -33,7 +47,7 @@ clarification, don't try to resolve it all here. Recommend the user let the
 workspace agent gather context first (it can grill them in-context with full
 repo access). Better to gather context there than at the root.
 
-### Step 1: Determine packages
+### Step 2: Determine packages
 
 Decide what the workspace needs:
 - **Dev packages**: repos to clone and edit (check `repos.json` for valid names)
@@ -43,12 +57,12 @@ Rules:
 - For jupyter-ai subpackages, always include `--with jupyter-ai` (the main package)
 - Propose the list to the user for confirmation
 
-### Step 2: Rough summary of changes
+### Step 3: Rough summary of changes
 
 Write a brief, high-level summary of what the task requires — enough to seed
 PROMPT.md. This is a rough sketch, not an implementation plan.
 
-### Step 3: Name the workspace
+### Step 4: Name the workspace
 
 Pattern: `<package-abbreviation>-<short-slug>`, e.g. `acp-defer-session-loading`,
 `chat-fix-message-rendering`, `router-add-priority-routing`.
@@ -59,18 +73,18 @@ Abbreviations: `jupyter-ai`→`jai`, `jupyter-ai-acp-client`→`acp`,
 `jupyter-server-documents`→`jsd`, `jupyter-server-mcp`→`mcp`,
 `jupyterlab-commands-toolkit`→`cmdtk`.
 
-### Step 4: Push back if too complex or vague
+### Step 5: Push back if too complex or vague
 
 If the task is too complex or too vague to scaffold confidently, **redirect —
 don't refuse.** Complexity is not a reason to avoid spawning; it's a reason not
 to plan at the root. Spawn the workspace anyway, but seed PROMPT.md so the
 workspace agent does the research and planning itself.
 
-### Step 5: Scaffold the workspace
+### Step 6: Scaffold the workspace
 
 Run from the workbench root. `ws create` only scaffolds — it makes the worktree,
 venv, and an open cmux workspace, then returns. It does NOT provision or launch
-an agent (that's Step 6–7).
+an agent (that's Step 7–8).
 
 ```bash
 just ws create <name>
@@ -79,7 +93,7 @@ just ws create <name>
 The workspace directory exists synchronously when this returns, so you can write
 files into it immediately.
 
-### Step 6: Write setup.sh and PROMPT.md (both as files)
+### Step 7: Write setup.sh and PROMPT.md (both as files)
 
 This is the heart of the handoff, and the reason the flow is split: **all
 free-form text goes into files, never through a flag.** Passing a long prompt or
@@ -126,7 +140,7 @@ for each affected repo when done, and notify the user when complete or stuck.
 
 ## Task
 
-<task / issue link + title, the rough summary from Step 2, and which packages are
+<task / issue link + title, the rough summary from Step 3, and which packages are
 dev-installed and why>
 ```
 
@@ -134,7 +148,7 @@ Keep the task section thin — the workspace agent expands it after researching.
 NOT plan the implementation here, and do NOT repeat general workflow info
 (build/test/notify commands); the agent reads that from AGENTS.md.
 
-### Step 7: Provision and launch, then notify
+### Step 8: Provision and launch, then notify
 
 Both files are on disk, so there is no race — `ws spawn` requires `setup.sh` and
 `PROMPT.md` and errors immediately if either is missing, then runs `setup.sh` in
