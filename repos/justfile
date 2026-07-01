@@ -1,4 +1,4 @@
-root := justfile_directory()
+checkout := justfile_directory()
 
 # Clone/fetch all repos from repos.json (parallel, live status board)
 # Env: REPOS_CLONE_JOBS = max concurrent git ops (default 8)
@@ -6,5 +6,10 @@ root := justfile_directory()
 clone:
     #!/usr/bin/env bash
     set -eo pipefail
-    root="{{ root }}"
-    exec bash "$root/scripts/repos-clone.sh" "$root"
+    # The shared repos/ + repos.json live at the workbench ROOT and are shared
+    # across all workspaces, so resolve the root from git — justfile_directory()
+    # here would be the workspace when invoked from a worktree. Mirrors dev/ + ws.
+    root="$(git rev-parse --path-format=absolute --git-common-dir | xargs dirname)"
+    # Run this checkout's own copy of the script (a workspace tests its edits
+    # against the shared repos/); {{ checkout }} is this checkout's root.
+    exec bash "{{ checkout }}/scripts/repos-clone.sh" "$root"

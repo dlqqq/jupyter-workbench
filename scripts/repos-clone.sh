@@ -85,6 +85,10 @@ work() {
         echo "$dir exists but is not a git repository" > "$errf"
         [[ "$IS_TTY" -eq 0 ]] && echo "✗ $name: not a git repo (remove $dir and retry)"
     else
+        # A dangling symlink (e.g. a workspace repos/ link whose shared target
+        # was deleted) is not caught by -d, and would make `git clone` fail with
+        # a confusing "File exists". It points at nothing, so remove it first.
+        [[ -L "$dir" && ! -e "$dir" ]] && rm -f "$dir"
         # missing -> clone
         [[ "$IS_TTY" -eq 0 ]] && echo "⬇ $name: cloning…"
         set_status "$idx" "cloning"

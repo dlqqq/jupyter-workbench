@@ -143,6 +143,19 @@ write_repos_json() {                 # $1=root, remaining args: name=url pairs
     [[ "$output" == *"not a git repo"* ]]
 }
 
+@test "dangling symlink at repos/<name> is replaced by a fresh clone" {
+    root="$(mk_temp_root)"
+    mk_bare_remote "$root" foo
+    write_repos_json "$root" "foo=file://$root/remotes/foo.git"
+    # Simulate a workspace repos/ symlink whose shared target was deleted.
+    ln -s "$root/nonexistent-target" "$root/repos/foo"
+    [ -L "$root/repos/foo" ] && [ ! -e "$root/repos/foo" ]  # dangling
+
+    run bash "$SCRIPT" "$root"
+    [ "$status" -eq 0 ]
+    [ -d "$root/repos/foo/.git" ]
+}
+
 @test "empty repos.json reports all 0 repos ready" {
     root="$(mk_temp_root)"
     echo '{}' > "$root/repos.json"
