@@ -116,7 +116,7 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 | Recipe | Description |
 |--------|-------------|
 | `just workbench verify` | Check that all prerequisites (tools, auth, config) are satisfied |
-| `just repos clone` | Clone/fetch all repos into workbench `repos/` |
+| `just repos clone` | Clone/fetch all repos into workbench `repos/` in parallel (live status board; `REPOS_CLONE_JOBS` caps concurrency, default 8) |
 | `just ws create <name>` | Create a new workspace (fast scaffold only) |
 | `just ws spawn <name>` | Run the workspace's `setup.sh` in its cmux workspace to provision + launch the agent (needs `setup.sh` + `PROMPT.md`) — _agent-invoked_ |
 | `just ws rm <name>` | Remove a workspace (instant; deletes files in the background) |

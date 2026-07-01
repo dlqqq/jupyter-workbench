@@ -8,7 +8,7 @@ The root `justfile` composes submodules via `mod`:
 
 | Module | File | Purpose |
 |--------|------|---------|
-| `repos` | `repos/justfile` | Pre-clone/fetch source repos (`just repos clone`) |
+| `repos` | `repos/justfile` | Pre-clone/fetch source repos in parallel (`just repos clone`; driver in `scripts/repos-clone.sh`) |
 | `dev` | `dev/justfile` | Per-workspace repo management (`add`, `setup`, `remove`, `checkout`, `ensure-fork`, `enable-extensions`) |
 | `ws` | `workspaces/justfile` | Workspace lifecycle (`create`, `rm`, `cleanup`) |
 | `server` | `server.just` | **Deprecated** — cmux/macOS JupyterLab server control |
@@ -57,7 +57,7 @@ workspace, producing up to N+1 PRs.
 
 ## Repo layout (repos/ / dev/ / tmp/)
 
-- **Workbench `repos/`** — pre-cloned source repos shared across workspaces. Populated by `just repos clone`. `repos clone` also sets `remote.origin.gh-resolved=base` so `gh pr checkout` resolves non-interactively.
+- **Workbench `repos/`** — pre-cloned source repos shared across workspaces. Populated by `just repos clone`, which clones/fetches all repos in parallel (bounded by `REPOS_CLONE_JOBS`, default 8) with a live status board; on fetch it reports new commits pulled onto the tracked upstream, and one repo failing doesn't abort the rest (failures are summarized with git stderr at the end). `repos clone` also sets `remote.origin.gh-resolved=base` so `gh pr checkout` resolves non-interactively.
 - **Workspace `repos/`** — symlinks to the workbench `repos/<name>`; read-only context.
 - **Workspace `dev/`** — worktrees created from the source repos, each on its own branch `YYYYMMDD-<ws>/<repo>`, added as editable members. `just dev add` creates them (no sync); `just dev setup` runs `uv sync` + enables extensions. PR checkouts land on the workspace-scoped branch (`gh pr checkout --branch`).
 - **Workspace `tmp/`** — worktrees for reading specific branches (`just dev checkout <repo> [branch]`). Not dev-installed.
