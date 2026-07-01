@@ -78,63 +78,73 @@ teardown() { wb_teardown; }
     [[ "$output" == *"just dev setup"* ]]
 }
 
-@test "ws create points at the setup.sh + PROMPT.md + ws setup flow" {
+@test "ws create points at the setup.sh + PROMPT.md + ws spawn flow" {
     run just ws create "$TEST_WS_NAME"
     [ "$status" -eq 0 ]
     [[ "$output" == *"setup.sh"* ]]
     [[ "$output" == *"PROMPT.md"* ]]
-    [[ "$output" == *"just ws setup $TEST_WS_NAME"* ]]
+    [[ "$output" == *"just ws spawn $TEST_WS_NAME"* ]]
+}
+
+@test "ws spawn errors when the workspace is missing" {
+    run just ws spawn "no-such-ws-xyz"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "ws spawn errors when setup.sh is missing" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    printf 'body\n' > "$TEST_WS/PROMPT.md"
+    run just ws spawn "$TEST_WS_NAME"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"setup.sh"* ]]
 }
 
 @test "ws spawn errors when PROMPT.md is missing" {
     just ws create "$TEST_WS_NAME" >/dev/null
-    # ws spawn resolves the workspace root from git, so run it from inside.
-    run bash -c "cd '$TEST_WS' && just ws spawn"
+    printf '#!/usr/bin/env bash\ntrue\n' > "$TEST_WS/setup.sh"
+    run just ws spawn "$TEST_WS_NAME"
     [ "$status" -ne 0 ]
     [[ "$output" == *"PROMPT.md"* ]]
 }
 
-@test "ws spawn launches the configured agent-cmd with PROMPT.md as its prompt" {
+@test "ws spawn runs the workspace's setup.sh (no-cmux path)" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    printf 'body\n' > "$TEST_WS/PROMPT.md"
+    printf '#!/usr/bin/env bash\necho ran-setup-marker\n' > "$TEST_WS/setup.sh"
+    run just ws spawn "$TEST_WS_NAME"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ran-setup-marker"* ]]
+}
+
+@test "ws _launch-agent launches the configured agent-cmd with PROMPT.md as its prompt" {
     just ws create "$TEST_WS_NAME" >/dev/null
     printf 'SENTINEL-PROMPT-BODY\n' > "$TEST_WS/PROMPT.md"
     # Point agent-cmd at a harmless command that echoes its args, so the exec'd
     # process prints the prompt instead of launching a real agent CLI. The
     # workspace is a worktree, so it has its own copy of workbench-config.json.
     printf '{ "agent-cmd": "echo AGENT-LAUNCHED" }\n' > "$TEST_WS/workbench-config.json"
-    run bash -c "cd '$TEST_WS' && just ws spawn"
+    # _launch-agent resolves the workspace root from git, so run it from inside.
+    run bash -c "cd '$TEST_WS' && just ws _launch-agent"
     [ "$status" -eq 0 ]
     [[ "$output" == *"AGENT-LAUNCHED"* ]]
     [[ "$output" == *"SENTINEL-PROMPT-BODY"* ]]
 }
 
-@test "ws spawn errors when agent-cmd is missing from config" {
+@test "ws _launch-agent errors when PROMPT.md is missing" {
+    just ws create "$TEST_WS_NAME" >/dev/null
+    run bash -c "cd '$TEST_WS' && just ws _launch-agent"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"PROMPT.md"* ]]
+}
+
+@test "ws _launch-agent errors when agent-cmd is missing from config" {
     just ws create "$TEST_WS_NAME" >/dev/null
     printf 'body\n' > "$TEST_WS/PROMPT.md"
     printf '{ "something-else": true }\n' > "$TEST_WS/workbench-config.json"
-    run bash -c "cd '$TEST_WS' && just ws spawn"
+    run bash -c "cd '$TEST_WS' && just ws _launch-agent"
     [ "$status" -ne 0 ]
     [[ "$output" == *"agent-cmd"* ]]
-}
-
-@test "ws setup errors when the workspace is missing" {
-    run just ws setup "no-such-ws-xyz"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"not found"* ]]
-}
-
-@test "ws setup errors when setup.sh is missing" {
-    just ws create "$TEST_WS_NAME" >/dev/null
-    run just ws setup "$TEST_WS_NAME"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"setup.sh"* ]]
-}
-
-@test "ws setup runs the workspace's setup.sh (no-cmux path)" {
-    just ws create "$TEST_WS_NAME" >/dev/null
-    printf '#!/usr/bin/env bash\necho ran-setup-marker\n' > "$TEST_WS/setup.sh"
-    run just ws setup "$TEST_WS_NAME"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"ran-setup-marker"* ]]
 }
 
 @test "ws rm removes the workspace directory immediately" {

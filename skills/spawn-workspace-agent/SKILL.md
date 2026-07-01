@@ -100,20 +100,22 @@ just dev setup [--with=<pkgs>]
 # Always reach the agent, even if provisioning failed above. The agent verifies
 # its env on startup (AGENTS.md step 0) and can fix + re-run `just dev setup` —
 # recovering in-context beats leaving a dead workspace for a human to notice.
-just ws spawn
+just ws _launch-agent
 ```
 
 - `<repos>` — comma-separated repos to dev-install (each optionally `<repo>#<pr>`)
 - `--with=<pkgs>` — optional comma-separated PyPI packages (passed to `dev setup`)
 - `dev add` creates the worktrees + editable members; `dev setup` syncs the venv
-  and enables extensions; `ws spawn` reads `PROMPT.md` and launches the agent CLI
-  (from `workbench-config.json`'s `agent-cmd`) with the prompt as its final arg.
-- **Do not use `set -e`** — if `dev setup` aborts, we still want `ws spawn` to
-  run so the agent can diagnose the failure from its scrollback and recover.
+  and enables extensions; `ws _launch-agent` reads `PROMPT.md` and launches the
+  agent CLI (from `workbench-config.json`'s `agent-cmd`) with the prompt as its
+  final arg. It's the private launcher `ws spawn` relies on — always end
+  `setup.sh` with it.
+- **Do not use `set -e`** — if `dev setup` aborts, we still want the agent to
+  launch so it can diagnose the failure from its scrollback and recover.
 
 Write `PROMPT.md` to the workspace root — this **is** the agent's prompt
-(`ws spawn` passes its contents verbatim to the agent CLI). Open with the worker
-framing, then the task:
+(`ws _launch-agent` passes its contents verbatim to the agent CLI). Open with the
+worker framing, then the task:
 
 ```markdown
 You are the workspace agent for the <name> workspace under the Jupyter Workbench.
@@ -134,16 +136,18 @@ NOT plan the implementation here, and do NOT repeat general workflow info
 
 ### Step 7: Provision and launch, then notify
 
-Both files are on disk, so there is no race — run setup.sh in the workspace's
-cmux terminal:
+Both files are on disk, so there is no race — `ws spawn` requires `setup.sh` and
+`PROMPT.md` and errors immediately if either is missing, then runs `setup.sh` in
+the workspace's cmux terminal:
 
 ```bash
-just ws setup <name>
+just ws spawn <name>
 ```
 
-This sources the venv and runs `setup.sh`. If provisioning fails (e.g. a version
-conflict in `dev setup`), fix it and re-run `just ws setup <name>` — it's
-idempotent up to the agent launch. Then notify the user:
+This sources the venv and runs `setup.sh`, which provisions and ends by launching
+the agent. If provisioning fails (e.g. a version conflict in `dev setup`), fix it
+and re-run `just ws spawn <name>` — it's idempotent up to the agent launch. Then
+notify the user:
 
 ```bash
 cmux notify --title "Spawned: <workspace-name>" --body "<one-line task summary>"
@@ -155,6 +159,7 @@ cmux notify --title "Spawned: <workspace-name>" --body "<one-line task summary>"
 - The workspace is fully isolated — changes there don't affect other workspaces
 - `setup.sh` and `PROMPT.md` are gitignored workspace artifacts — they record how
   the workspace was provisioned and what it was asked to do
-- `ws spawn` and `ws setup` are agent-plumbing recipes — normally invoked through
-  `setup.sh`, not run by hand
+- `ws spawn` is the orchestrator's provision+launch verb; `ws _launch-agent` is
+  the private launcher `setup.sh` ends with. Neither is meant for a human to run
+  by hand outside this flow.
 - TODO: Make the agent CLI configurable (support Codex, Claude Code, Kiro, etc.)

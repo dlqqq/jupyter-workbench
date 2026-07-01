@@ -44,7 +44,7 @@ To spawn a workspace agent for a task, follow `skills/spawn-workspace-agent/SKIL
 In short: grill only enough for a go/no-go decision (use the `grill-me` skill),
 pick the repos to dev-install, name the workspace, `just ws create <name>`, write
 `setup.sh` + `PROMPT.md` into the workspace (free-form text goes in files, never
-through a flag — `PROMPT.md` *is* the agent's prompt), then `just ws setup <name>`
+through a flag — `PROMPT.md` *is* the agent's prompt), then `just ws spawn <name>`
 to provision and launch. You scaffold; you do **not** plan the implementation.
 
 Trivial one-off workbench tweaks that need no iteration (a doc fix, a recipe

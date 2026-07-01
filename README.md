@@ -28,10 +28,11 @@ just dev add jupyter-ai-acp-client,jupyter-ai-persona-manager
 just dev setup
 
 # Or script the provisioning: write workspaces/my-feature/setup.sh with the
-# chain (dev add → dev setup → ws spawn) plus a PROMPT.md, then run it in the
-# cmux workspace. Both are files, so no command/prompt text crosses a shell-
-# quoting boundary. (Usually an orchestrator agent does this — see below.)
-just ws setup my-feature
+# chain (dev add → dev setup → ws _launch-agent) plus a PROMPT.md, then let
+# ws spawn run it in the cmux workspace. Both are files, so no command/prompt
+# text crosses a shell-quoting boundary. (Usually an orchestrator agent does
+# this — see below.)
+just ws spawn my-feature
 
 # Check out a branch for reading (without dev-installing)
 just dev checkout jupyter-chat feature-branch
@@ -51,9 +52,9 @@ just dev checkout jupyter-chat feature-branch
 ## Configuration
 
 `workbench-config.json` (at the workbench root, version-controlled) holds
-workbench-wide settings. Today it defines `agent-cmd` — the CLI that `just ws
-spawn` launches for the workspace agent, with `PROMPT.md`'s contents appended as
-the final argument:
+workbench-wide settings. Today it defines `agent-cmd` — the CLI launched for the
+workspace agent (by `ws _launch-agent`, at the end of `setup.sh`), with
+`PROMPT.md`'s contents appended as the final argument:
 
 ```json
 { "agent-cmd": "claude --permission-mode auto" }
@@ -72,15 +73,14 @@ Recipes are organized into modules. Run `just --list --list-submodules` to see e
 |--------|-------------|
 | `just repos clone` | Clone/fetch all repos into workbench `repos/` |
 | `just ws create <name>` | Create a new workspace (fast scaffold only) |
-| `just ws setup <name>` | Run the workspace's `setup.sh` in its cmux workspace (provision + launch) — _agent-invoked_ |
-| `just ws spawn` | Launch the workspace agent with `PROMPT.md` as its prompt — _agent-invoked_ |
+| `just ws spawn <name>` | Run the workspace's `setup.sh` in its cmux workspace to provision + launch the agent (needs `setup.sh` + `PROMPT.md`) — _agent-invoked_ |
 | `just ws rm <name>` | Remove a workspace (instant; deletes files in the background) |
 | `just ws cleanup` | Delete all workspaces not open in cmux |
 
-> `ws setup` and `ws spawn` are normally driven by an orchestrator agent through
-> a workspace's `setup.sh` (see the `spawn-workspace-agent` skill), not run by
-> hand. `ws create` + writing `setup.sh`/`PROMPT.md` are the human/orchestrator
-> entry points.
+> `ws spawn` is normally driven by an orchestrator agent (see the
+> `spawn-workspace-agent` skill), not run by hand. `ws create` + writing
+> `setup.sh`/`PROMPT.md` are the human/orchestrator entry points. `setup.sh` ends
+> in `just ws _launch-agent`, the private recipe that launches the agent CLI.
 
 ### Workspace
 
