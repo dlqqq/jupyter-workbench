@@ -92,6 +92,23 @@ write_repos_json() {                 # $1=root, remaining args: name=url pairs
     [[ "$output" == *"+1"* ]]
 }
 
+@test "fetch fast-forwards the local checked-out branch to origin" {
+    root="$(mk_temp_root)"
+    mk_bare_remote "$root" foo
+    write_repos_json "$root" "foo=file://$root/remotes/foo.git"
+    run bash "$SCRIPT" "$root"
+    [ "$status" -eq 0 ]
+
+    push_commit_to_remote "$root" foo
+    run bash "$SCRIPT" "$root"
+    [ "$status" -eq 0 ]
+    # the local branch — not just origin/main — must now point at the new commit
+    local head origin
+    head=$(git -C "$root/repos/foo" rev-parse HEAD)
+    origin=$(git -C "$root/repos/foo" rev-parse origin/main)
+    [ "$head" = "$origin" ]
+}
+
 @test "fetch with no new commits reports +0" {
     root="$(mk_temp_root)"
     mk_bare_remote "$root" foo

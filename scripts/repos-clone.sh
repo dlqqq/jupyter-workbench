@@ -73,8 +73,16 @@ work() {
                 count=0
             fi
             git -C "$dir" config remote.origin.gh-resolved base   # gh default base repo
-            set_status "$idx" "done +$count"
-            [[ "$IS_TTY" -eq 0 ]] && echo "✓ $name: fetched (+$count)"
+            # fetch only moves remote-tracking refs; fast-forward the checked-out
+            # branch too so `repos/<name>` matches origin (these are read-only
+            # context, so a diverged/dirty branch that can't ff is flagged, not forced).
+            if git -C "$dir" merge --ff-only "$up" >/dev/null 2>"$errf"; then
+                set_status "$idx" "done +$count"
+                [[ "$IS_TTY" -eq 0 ]] && echo "✓ $name: fetched (+$count)"
+            else
+                set_status "$idx" "failed cannot ff to $up"
+                [[ "$IS_TTY" -eq 0 ]] && echo "✗ $name: cannot fast-forward to $up"
+            fi
         else
             set_status "$idx" "failed fetch"
             [[ "$IS_TTY" -eq 0 ]] && echo "✗ $name: fetch failed"
