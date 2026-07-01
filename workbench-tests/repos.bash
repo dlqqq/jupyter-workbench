@@ -40,6 +40,9 @@ mk_bare_remote() {                   # $1=root $2=name
     git -C "$work" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
     git init -q --bare "$root/remotes/$name.git"
     git -C "$work" push -q "$root/remotes/$name.git" HEAD:refs/heads/main
+    # Point the bare remote's HEAD at main so clones check it out regardless of
+    # the runner's init.defaultBranch (CI often defaults to master).
+    git -C "$root/remotes/$name.git" symbolic-ref HEAD refs/heads/main
     rm -rf "$work"
 }
 
