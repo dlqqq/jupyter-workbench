@@ -1,11 +1,16 @@
 ---
 name: open-pr
-description: Open a pull request from a repo in a workspace. Use when the user asks you to open a PR for your changes.
+description: Open a draft pull request from a repo in a workspace, label it for the changelog, and watch CI to green. Use when opening a PR for your changes (agents may do this without asking; PRs open in draft).
 ---
 
 # Open a Pull Request
 
 Push your changes to a fork and open a PR against the upstream repo.
+
+**Agents may open PRs without asking** — but **always open them in draft status**.
+A draft PR is the request for review; you do not need explicit permission to
+create one. You still do NOT mark a PR ready-for-review or merge it without the
+user.
 
 ## Prerequisites
 
@@ -72,34 +77,50 @@ with the message text instead of just focusing the empty input.
 Fixes jupyterlab/jupyter-chat#400
 ```
 
-### 6. Ask for user approval
+### 6. Push and open the PR as a draft
 
-Open the preview in cmux markdown viewer and ask the user to approve:
-
-```bash
-cmux markdown open PR.md
-```
-
-Then notify:
-```bash
-cmux notify --title "PR ready for review" --body "Please review PR.md and approve"
-```
-
-**Wait for the user to approve before proceeding.** Do NOT open the PR without explicit approval.
-
-### 7. Push and open PR
-
-After approval:
+No approval step — push and open directly, but **always as a draft** (`--draft`):
 
 ```bash
 git push -u fork <branch-name>
 
 gh pr create \
+  --draft \
   --title "<title from PR.md>" \
   --body "$(cat PR.md | tail -n +2)"
 ```
 
 Note: Screenshots referenced in PR.md won't render on GitHub (they're local paths). The user can drag-drop them into the PR description after it's created, or they can be committed to the branch.
+
+### 7. Label the PR for the changelog (best-effort)
+
+Every repo has a workflow that requires each PR to carry a label so the changelog
+builds correctly. After opening, list the repo's available labels and apply the
+most fitting one:
+
+```bash
+gh label list                 # see what this repo offers (e.g. enhancement, bug, maintenance, documentation)
+gh pr edit <pr-number> --add-label "<chosen-label>"
+```
+
+Pick the label that matches the change (a fix → `bug`, a feature → `enhancement`,
+docs → `documentation`, chores/deps → `maintenance`, mapping to whatever the repo
+actually lists). **If labeling fails (e.g. missing permission), ignore it and move
+on** — do not try to fix it. We may not have label permissions on every repo.
+
+### 8. Watch CI to green before notifying
+
+Watch the PR's checks and only notify the user once CI is green:
+
+```bash
+cd dev/<repo> && gh pr checks --watch
+```
+
+- **CI green** → notify success (step 9 of the workspace workflow: `cmux notify --title "Done: <ws>" …`).
+- **CI failing** → try to fix the failure, push the fix, and let the watch re-run.
+- **Stuck** (can't figure out the failure after a genuine attempt) → **abort and
+  notify** with the blocker: `cmux notify --title "Stuck: <ws>" --body "<what's red + why>"`.
+  Don't spin indefinitely.
 
 ## Full Example
 
@@ -126,18 +147,22 @@ Routes messages to the correct persona when multiple are active.
 Fixes #42
 EOF
 
-# Preview and wait for approval
-cmux markdown open PR.md
-cmux notify --title "PR ready for review" --body "Please review PR.md and approve"
-# ... wait for user approval ...
-
-# Push and open
+# Push and open as a draft (no approval needed)
 git push -u fork fix-priority-routing
-gh pr create --title "Fix priority routing for multiple personas" --body "$(cat PR.md | tail -n +2)"
+gh pr create --draft --title "Fix priority routing for multiple personas" --body "$(cat PR.md | tail -n +2)"
+
+# Label for the changelog (best-effort; ignore failures)
+gh label list
+gh pr edit <pr-number> --add-label "bug"
+
+# Watch CI to green, then notify
+cd dev/jupyter-ai-router && gh pr checks --watch
 ```
 
 ## Notes
 
-- Do NOT open a PR unless the user explicitly asks
+- Agents may open PRs freely, but **always as drafts** (`--draft`). Do NOT mark a
+  PR ready-for-review or merge it without the user.
 - Do NOT push to `main` — always use a feature branch
 - The `fork` remote points to your personal fork; `origin` points to the upstream repo
+- Labeling and CI-watching are part of opening a PR — don't stop at `gh pr create`.

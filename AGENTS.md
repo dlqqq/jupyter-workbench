@@ -92,8 +92,12 @@ What you can produce from a workspace:
 3. **Cover.** Add test coverage at unit/integration level (E2E when supported).
 4. **Verify.** From inside `dev/<repo>` (venv already active): `pytest`,
    `jlpm lint` (frontend), `mypy .` (if used).
-5. **Notify.** `cmux notify --title "Done: <ws>" --body "..."` or
-   `--title "Stuck: <ws>" --body "<blocker>"`.
+5. **Open PRs.** Open a PR per affected repo via `skills/open-pr` — agents may do
+   this without asking, but **always as drafts**. The skill also labels the PR for
+   the changelog (best-effort) and watches CI to green.
+6. **Notify.** Only once CI is green: `cmux notify --title "Done: <ws>" --body "..."`.
+   If you get stuck (env broken, CI red you can't fix), notify early with
+   `--title "Stuck: <ws>" --body "<blocker>"` rather than spinning.
 
 ### Rules
 
@@ -115,7 +119,7 @@ description matches your task.
 |-------|-------------|
 | `skills/grill-me` | Stress-test a plan by interviewing the user one question at a time. |
 | `skills/merge-workbench-pr` | Merge this workspace's approved workbench PR, then always rebase the worktree onto the latest main. |
-| `skills/open-pr` | Open a pull request from a repo in the workspace. |
+| `skills/open-pr` | Open a draft PR from a repo, label it for the changelog, and watch CI to green. Agents may open (draft) PRs without asking. |
 | `skills/prep-jupyter-ai-release` | Prep a `jupyter-ai` release: bump subpackage version floors, add breaking-version ceilings, and document the versioning strategy. |
 | `skills/rebuild-frontend` | After frontend changes (`.ts`/`.tsx`/`.css`), before running E2E tests. |
 | `skills/spawn-workspace-agent` | **Root orchestrator only** — scaffold a workspace and launch a workspace agent for a task. |
