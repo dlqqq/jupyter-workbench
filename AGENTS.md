@@ -122,6 +122,7 @@ description matches your task.
 | `skills/open-pr` | Open a draft PR from a repo, label it for the changelog, and watch CI to green. Agents may open (draft) PRs without asking. |
 | `skills/prep-jupyter-ai-release` | Prep a `jupyter-ai` release: bump subpackage version floors, add breaking-version ceilings, and document the versioning strategy. |
 | `skills/rebuild-frontend` | After frontend changes (`.ts`/`.tsx`/`.css`), before running E2E tests. |
+| `skills/use-page-config` | Forward immutable server-extension data (traitlets config, entry-point data, feature flags) to a lab extension at startup via `PageConfig`, avoiding an init network request. |
 | `skills/spawn-workspace-agent` | **Root orchestrator only** — scaffold a workspace and launch a workspace agent for a task. |
 
 ## Other references
