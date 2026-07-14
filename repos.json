@@ -17,5 +17,6 @@
   "jupyter-server-documents": { "url": "git@github.com:jupyter-ai-contrib/jupyter-server-documents.git" },
   "jupyter-server-mcp": { "url": "git@github.com:jupyter-ai-contrib/jupyter-server-mcp.git" },
   "jupyterlab-commands-toolkit": { "url": "git@github.com:jupyter-ai-contrib/jupyterlab-commands-toolkit.git" },
-  "jupyter-ydoc": { "url": "git@github.com:jupyter-server/jupyter_ydoc.git" }
+  "jupyter-ydoc": { "url": "git@github.com:jupyter-server/jupyter_ydoc.git" },
+  "jupyter-server": { "url": "git@github.com:jupyter-server/jupyter_server.git" }
 }
