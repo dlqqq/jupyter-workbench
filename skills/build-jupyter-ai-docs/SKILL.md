@@ -59,6 +59,19 @@ dev/<your-repo>/docs/source/contributors/
 └── _static/diagram.png
 ```
 
+**Auto-generating an API reference.** You can pull a Python API reference from
+source instead of hand-writing it, using autodoc directives in an `{eval-rst}`
+block — `.. autoclass::`, `.. autopydantic_model::`, or `.. contract-api::` for a
+class whose members are grouped by contract level. The build bundles
+autodoc + napoleon + linkcode + autodoc_pydantic, so signatures, types, and
+GitHub `[source]` links are generated automatically. To classify members
+(Required / Recommended / Optional / Available-to-subclasses /
+Available-to-consumers), mark them with the `mark_*` decorators from a
+`doc_markers.py` module (copy the one in `jupyter-ai-persona-manager`; it's
+documentation-only and dependency-free). See the main Jupyter AI contributor
+guide's "Subpackage documentation" section, and `jupyter-ai-persona-manager` for
+a worked example.
+
 ### 2. Build the aggregated site
 
 ```bash
