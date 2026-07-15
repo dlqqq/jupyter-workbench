@@ -207,10 +207,15 @@ docs-deps:
         echo "Error: jupyter-ai is not dev-installed. Run 'just dev add jupyter-ai && uv sync' first." >&2
         exit 1
     fi
-    # jupyter-ai's docs/requirements.txt lists the Sphinx theme + extensions but
-    # (like Read the Docs) not Sphinx itself, so add it explicitly.
-    echo "Installing Sphinx + docs requirements into the venv..."
-    uv pip install sphinx -r "$jai/docs/requirements.txt"
+    echo "Installing docs build dependencies into the venv..."
+    if grep -q '^docs = \[' "$jai/pyproject.toml" 2>/dev/null; then
+        # Preferred: the `docs` extra is the single source of truth.
+        uv pip install -e "$jai[docs]"
+    else
+        # Fallback for jupyter-ai checkouts predating the `docs` extra: the theme
+        # + extensions live in docs/requirements.txt, which omits Sphinx itself.
+        uv pip install sphinx -r "$jai/docs/requirements.txt"
+    fi
     echo "✓ Docs dependencies installed"
 
 # Preview subpackage docs in the aggregated jupyter-ai site (see skills/build-jupyter-ai-docs)
