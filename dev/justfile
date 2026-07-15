@@ -58,14 +58,18 @@ add repos:
         echo "Added remote '$pr_author' → $fork_url"
     fi
 
-    # Add as editable workspace member(s) WITHOUT syncing
+    # Add as editable workspace member(s) WITHOUT syncing. Request the common
+    # `test` and `docs` extras so their dependencies are installed on `uv sync`
+    # too; uv only warns (does not error) for a package that lacks one of them,
+    # so this is safe for every repo.
     pkg_parents=$(jq -r --arg r "$repo_name" '
         .[$r].packages // [{"parentDir": "."}]
         | .[].parentDir
     ' "$root/repos.json")
 
     while IFS= read -r parent_dir; do
-        uv add "./dev/$repo_name/$parent_dir" --workspace --editable --no-sync
+        uv add "./dev/$repo_name/$parent_dir" --workspace --editable --no-sync \
+            --extra test --extra docs
     done <<< "$pkg_parents"
 
     echo "✓ Added: dev/$repo_name (run 'just dev setup' to install)"
@@ -196,28 +200,6 @@ setup with_pkgs="":
     # Enable extensions for every repo under ./dev
     just dev enable-all-extensions
 
-# Install the jupyter-ai documentation build dependencies into the venv
-[no-cd]
-docs-deps:
-    #!/usr/bin/env bash
-    set -eo pipefail
-    root="{{ root }}"
-    jai="$root/dev/jupyter-ai"
-    if [[ ! -d "$jai" ]]; then
-        echo "Error: jupyter-ai is not dev-installed. Run 'just dev add jupyter-ai && uv sync' first." >&2
-        exit 1
-    fi
-    echo "Installing docs build dependencies into the venv..."
-    if grep -q '^docs = \[' "$jai/pyproject.toml" 2>/dev/null; then
-        # Preferred: the `docs` extra is the single source of truth.
-        uv pip install -e "$jai[docs]"
-    else
-        # Fallback for jupyter-ai checkouts predating the `docs` extra: the theme
-        # + extensions live in docs/requirements.txt, which omits Sphinx itself.
-        uv pip install sphinx -r "$jai/docs/requirements.txt"
-    fi
-    echo "✓ Docs dependencies installed"
-
 # Preview subpackage docs in the aggregated jupyter-ai site (see skills/build-jupyter-ai-docs)
 [no-cd]
 build-jai-docs:
@@ -233,7 +215,8 @@ build-jai-docs:
     # Use the workspace venv's tools whether or not it is activated.
     [[ -d "$root/.venv/bin" ]] && export PATH="$root/.venv/bin:$PATH"
     if ! command -v sphinx-build &>/dev/null; then
-        echo "Error: sphinx-build not found. Run 'just dev docs-deps' first." >&2
+        echo "Error: sphinx-build not found. The docs build deps come from jupyter-ai's" >&2
+        echo "'docs' extra, which 'just dev add' requests; run 'just dev setup' (or 'uv sync')." >&2
         exit 1
     fi
 

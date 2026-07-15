@@ -30,30 +30,21 @@ you don't already have it:
 
 ```bash
 just dev add jupyter-ai
-uv sync
+just dev setup       # (or: uv sync)
 ```
 
-`dev/jupyter-ai` also needs to be on a branch that has the docs-submodule
-infrastructure (`submodules/manifest.json` + `docs/source/_ext/subpackage_docs.py`).
-This is on `main` as of the "submodule docs infrastructure" PR.
+`just dev add` requests each package's `docs` extra, so `just dev setup` /
+`uv sync` installs Sphinx + the theme and extensions automatically — no separate
+docs-dependency step is needed. (`dev/jupyter-ai` also needs the docs-submodule
+infrastructure — `submodules/manifest.json` + `docs/source/_ext/subpackage_docs.py`
+— which is on `main`.)
 
 Your subpackage must **also** be dev-installed (`just dev add <repo>`) so its
 live `docs/` is on disk — that is what gets previewed.
 
 ## Steps
 
-### 1. Install the docs build dependencies (once per venv)
-
-The Sphinx theme + extensions (and Sphinx itself, which `docs/requirements.txt`
-omits, matching Read the Docs) are not in the base venv. Install them once:
-
-```bash
-just dev docs-deps
-```
-
-If you skip this, the build step fails with `sphinx-build not found`.
-
-### 2. Write your docs in the subpackage
+### 1. Write your docs in the subpackage
 
 Inside `dev/<your-repo>/`, create either or both sections. An `index.md` is
 **required** in each section you want to surface (its H1 becomes the subpage
@@ -68,7 +59,7 @@ dev/<your-repo>/docs/source/contributors/
 └── _static/diagram.png
 ```
 
-### 3. Build the aggregated site
+### 2. Build the aggregated site
 
 ```bash
 just dev build-jai-docs
@@ -80,7 +71,7 @@ submodule trees and removes generated staging dirs, so your working tree is left
 pristine regardless of success or failure. Your subpackage's `docs/` files are
 never touched.
 
-### 4. Inspect the result
+### 3. Inspect the result
 
 Open the printed `file://…/index.html` and confirm:
 
