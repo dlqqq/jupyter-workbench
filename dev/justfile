@@ -196,6 +196,100 @@ setup with_pkgs="":
     # Enable extensions for every repo under ./dev
     just dev enable-all-extensions
 
+# Install the jupyter-ai documentation build dependencies into the venv
+[no-cd]
+docs-deps:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    jai="$root/dev/jupyter-ai"
+    if [[ ! -d "$jai" ]]; then
+        echo "Error: jupyter-ai is not dev-installed. Run 'just dev add jupyter-ai && uv sync' first." >&2
+        exit 1
+    fi
+    # jupyter-ai's docs/requirements.txt lists the Sphinx theme + extensions but
+    # (like Read the Docs) not Sphinx itself, so add it explicitly.
+    echo "Installing Sphinx + docs requirements into the venv..."
+    uv pip install sphinx -r "$jai/docs/requirements.txt"
+    echo "✓ Docs dependencies installed"
+
+# Preview subpackage docs in the aggregated jupyter-ai site (see skills/build-jupyter-ai-docs)
+[no-cd]
+build-jai-docs:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    root="{{ root }}"
+    jai="$root/dev/jupyter-ai"
+
+    if [[ ! -d "$jai" ]]; then
+        echo "Error: jupyter-ai is not dev-installed. Run 'just dev add jupyter-ai && uv sync' first." >&2
+        exit 1
+    fi
+    # Use the workspace venv's tools whether or not it is activated.
+    [[ -d "$root/.venv/bin" ]] && export PATH="$root/.venv/bin:$PATH"
+    if ! command -v sphinx-build &>/dev/null; then
+        echo "Error: sphinx-build not found. Run 'just dev docs-deps' first." >&2
+        exit 1
+    fi
+
+    manifest="$jai/submodules/manifest.json"
+    if [[ ! -f "$manifest" ]]; then
+        echo "Error: $manifest not found (is dev/jupyter-ai on a branch with the docs submodule infra?)" >&2
+        exit 1
+    fi
+
+    # Repo slugs that are documentation submodules (submodules/<slug>).
+    # (Plain while-read for bash 3.2 compatibility — no mapfile.)
+    submodule_slugs=()
+    while IFS= read -r slug; do
+        [[ -n "$slug" ]] && submodule_slugs+=("$slug")
+    done < <(jq -r 'to_entries[] | .value | split("/")[1]' "$manifest")
+
+    # For each dev-installed repo that is also a doc submodule AND ships live
+    # docs/, overlay its docs/ into the submodule working tree so the aggregation
+    # hook picks up the *uncommitted* content. Track what we touched for cleanup.
+    overlaid=()
+    for slug in "${submodule_slugs[@]}"; do
+        dev_docs="$root/dev/$slug/docs"
+        sub_dir="$jai/submodules/$slug"
+        [[ -d "$root/dev/$slug" && -d "$dev_docs" && -d "$sub_dir" ]] || continue
+        overlaid+=("$slug")
+    done
+
+    # Guaranteed cleanup: restore every overlaid submodule to its pinned (sparse)
+    # state and remove generated staging dirs, even if the build fails.
+    cleanup() {
+        for slug in "${overlaid[@]}"; do
+            sub_dir="$jai/submodules/$slug"
+            git -C "$sub_dir" checkout -- . 2>/dev/null || true
+            git -C "$sub_dir" clean -ffdq 2>/dev/null || true
+        done
+        # Staging dirs the hook copies into docs/source/{contributors,developers}/<repo>/
+        # are git-ignored; clean them so the tree is pristine after preview.
+        for section in contributors developers; do
+            for slug in "${submodule_slugs[@]}"; do
+                rm -rf "$jai/docs/source/$section/$slug"
+            done
+        done
+    }
+    trap cleanup EXIT
+
+    if [[ ${#overlaid[@]} -eq 0 ]]; then
+        echo "Note: no dev-installed subpackage ships docs/ — building the base site only."
+    else
+        for slug in "${overlaid[@]}"; do
+            echo "Overlaying live docs from dev/$slug → submodules/$slug/docs"
+            mkdir -p "$jai/submodules/$slug/docs"
+            cp -R "$root/dev/$slug/docs/." "$jai/submodules/$slug/docs/"
+        done
+    fi
+
+    out="$jai/docs/_build/html"
+    echo "Building docs → $out"
+    sphinx-build -b html "$jai/docs/source" "$out"
+    echo
+    echo "✓ Docs built. Open: file://$out/index.html"
+
 # Check out a repo branch under tmp/ (for reading without modifying repos/)
 [no-cd]
 checkout repo_name branch="main":

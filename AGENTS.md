@@ -117,6 +117,7 @@ description matches your task.
 
 | Skill | When to use |
 |-------|-------------|
+| `skills/build-jupyter-ai-docs` | Preview a subpackage's `docs/source/{contributors,developers}/` in the aggregated `jupyter-ai` site before releasing. |
 | `skills/grill-me` | Stress-test a plan by interviewing the user one question at a time. |
 | `skills/merge-workbench-pr` | Merge this workspace's approved workbench PR, then always rebase the worktree onto the latest main. |
 | `skills/open-pr` | Open a draft PR from a repo, label it for the changelog, and watch CI to green. Agents may open (draft) PRs without asking. |
