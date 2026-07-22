@@ -119,6 +119,7 @@ description matches your task.
 |-------|-------------|
 | `skills/build-jupyter-ai-docs` | Preview a subpackage's `docs/source/{contributors,developers}/` in the aggregated `jupyter-ai` site before releasing. |
 | `skills/grill-me` | Stress-test a plan by interviewing the user one question at a time. |
+| `skills/group-dependabot-prs` | Consolidate a repo's separate Dependabot PRs into ONE grouped PR: install a grouping config (security-only or all updates), close the old ungrouped PRs, merge the config, and retrigger Dependabot. |
 | `skills/handoff-project-board` | **Root orchestrator only** — spawn worker agents in parallel for all open issues on a GitHub project board, grouping related issues per agent and moving board status as work starts/finishes. |
 | `skills/merge-workbench-pr` | Merge this workspace's approved workbench PR, then always rebase the worktree onto the latest main. |
 | `skills/open-pr` | Open a draft PR from a repo, label it for the changelog, and watch CI to green. Agents may open (draft) PRs without asking. |
