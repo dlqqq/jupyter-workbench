@@ -8,6 +8,7 @@ mod ws 'workspaces'
 mod workbench 'workbench.just'
 mod server
 mod browser
+mod superreleaser
 mod workbench-tests
 
 alias list := list-recipes

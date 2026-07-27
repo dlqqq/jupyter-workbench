@@ -30,3 +30,7 @@ workspaces/*
 !workspaces/.sample-notebooks/
 !workspaces/justfile
 worktrees/
+
+# Airflow local home (SQLite db, logs, generated admin password)
+airflow_home/
+**/airflow_home/

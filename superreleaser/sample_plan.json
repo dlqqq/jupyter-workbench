@@ -1,0 +1,12 @@
+{
+  "dry_run": true,
+  "waves": [
+    [
+      { "package": "jupyter-ai-acp-client", "version_spec": "v0.2.2", "branch": "main" },
+      { "package": "jupyter-ai-persona-manager", "version_spec": "v0.2.0", "branch": "main" }
+    ],
+    [
+      { "package": "jupyter-ai", "version_spec": "v3.1.0", "branch": "main" }
+    ]
+  ]
+}
