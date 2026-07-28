@@ -1,5 +1,34 @@
 root := justfile_directory()
 
+# Airflow project dir + a single AIRFLOW_HOME under it (SQLite db, logs, config).
+af := root / "airflow-superreleaser"
+
+# Start Airflow (all-in-one: API server + scheduler + triggerer) on SQLite, with
+# auth disabled for localhost-only use. Foreground/long-lived — leave it running,
+# then open http://localhost:8080 and trigger the `cf_release` DAG.
+[group('superreleaser')]
+airflow:
+    #!/usr/bin/env bash
+    set -eo pipefail
+    export AIRFLOW_HOME="{{ af }}/airflow_home"
+    export AIRFLOW__CORE__DAGS_FOLDER="{{ af }}/dags"
+    export AIRFLOW__CORE__LOAD_EXAMPLES=False
+    export AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=True
+    echo "Airflow UI → http://localhost:8080 (auth disabled; localhost only)"
+    exec "{{ root }}/.venv/bin/airflow" standalone
+
+# Trigger the cf_release DAG for a package (dry-run by default). Airflow must be
+# running (`just superreleaser airflow`). Force a target with version=0.2.0.
+[group('superreleaser')]
+cf-release package version="" dry_run="true":
+    #!/usr/bin/env bash
+    set -eo pipefail
+    export AIRFLOW_HOME="{{ af }}/airflow_home"
+    export AIRFLOW__CORE__DAGS_FOLDER="{{ af }}/dags"
+    conf=$(printf '{"package":"%s","version":"%s","dry_run":%s}' "{{ package }}" "{{ version }}" "{{ dry_run }}")
+    echo "conf: $conf"
+    "{{ root }}/.venv/bin/airflow" dags trigger cf_release --conf "$conf"
+
 # Bring up the local Prefect server + serve() executor in cmux surfaces, open
 # the dashboard, and print the trigger command. Server + executor are standing
 # services; SQLite (~/.prefect) persists paused/gated state across sessions.
