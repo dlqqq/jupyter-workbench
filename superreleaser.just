@@ -12,7 +12,7 @@ airflow:
     set -eo pipefail
     export AIRFLOW_HOME="{{ af }}/airflow_home"
     export AIRFLOW__CORE__DAGS_FOLDER="{{ af }}/dags"
-    export AIRFLOW__CORE__LOAD_EXAMPLES=False
+    # export AIRFLOW__CORE__LOAD_EXAMPLES=False
     export AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=True
     echo "Airflow UI → http://localhost:8080 (auth disabled; localhost only)"
     exec "{{ root }}/.venv/bin/airflow" standalone
@@ -28,6 +28,18 @@ cf-release package version="" dry_run="true":
     conf=$(printf '{"package":"%s","version":"%s","dry_run":%s}' "{{ package }}" "{{ version }}" "{{ dry_run }}")
     echo "conf: $conf"
     "{{ root }}/.venv/bin/airflow" dags trigger cf_release --conf "$conf"
+
+# Trigger the cf_release_batch DAG from a plan JSON file (default: the sample
+# two-wave plan). Airflow must be running (`just superreleaser airflow`).
+[group('superreleaser')]
+cf-release-batch plan=(af / "sample_batch_plan.json"):
+    #!/usr/bin/env bash
+    set -eo pipefail
+    export AIRFLOW_HOME="{{ af }}/airflow_home"
+    export AIRFLOW__CORE__DAGS_FOLDER="{{ af }}/dags"
+    conf=$(cat "{{ plan }}")
+    echo "plan ({{ plan }}):"; echo "$conf"
+    "{{ root }}/.venv/bin/airflow" dags trigger cf_release_batch --conf "$conf"
 
 # Bring up the local Prefect server + serve() executor in cmux surfaces, open
 # the dashboard, and print the trigger command. Server + executor are standing

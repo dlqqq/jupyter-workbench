@@ -109,6 +109,42 @@ Open the UI (http://localhost:8080), then trigger `cf_release` with a conf:
 At the `approval` task the run enters `awaiting_input`; open it in the UI and
 click **Approve** or **Reject**.
 
+## Releasing several packages in order (`cf_release_batch` DAG)
+
+To release a chain of packages — e.g. `jupyter-ai-acp-client 0.2.1` then
+`jupyter-ai 3.1.1`, which depends on it — trigger `cf_release_batch` with an
+ordered plan of **waves**:
+
+```json
+{
+  "dry_run": true,
+  "waves": [
+    [ { "package": "jupyter-ai-acp-client", "version": "0.2.1" } ],
+    [ { "package": "jupyter-ai", "version": "3.1.1" } ]
+  ]
+}
+```
+
+```bash
+just superreleaser cf-release-batch                       # uses sample_batch_plan.json
+just superreleaser cf-release-batch path/to/plan.json     # or your own plan
+```
+
+The batch runs the full single-package `cf_release` pipeline once per package
+(each a child DAG run with its own PR and its own approval gate). Packages in the
+same wave release **concurrently**; waves run **in sequence**; any failure or
+rejection **stops the batch** so dependents never start.
+
+**Why in order, not all-parallel:** `jupyter-ai`'s recipe pins
+`jupyter-ai-acp-client >=0.2.1`, and `cf_release`'s verify step checks that range
+actually resolves on conda-forge — which is only true once acp-client's release
+has fully shipped. So an upstream must be **live** before a dependent's release
+begins; that's exactly what the topological wave order guarantees. Independent
+packages (no dependency between them) go in the same wave and parallelize.
+
+For now the plan must be **topologically sorted by hand** — the batch trusts the
+given order and doesn't compute the dependency graph itself.
+
 ## Guardrails
 
 - **Merge is gated behind the human.** The DAG opens/annotates the PR, waits for
