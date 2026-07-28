@@ -45,9 +45,24 @@ requirements:
 def test_read_fields():
     assert rcp.current_version(SAMPLE) == "0.2.0"
     assert rcp.pypi_name(SAMPLE) == "jupyter-ai-acp-client"
+    assert rcp.conda_package_name(SAMPLE) == "jupyter-ai-acp-client"
     run = rcp.current_run_requirements(SAMPLE)
     assert "jupyter_server >=2.4.0,<3" in run
     assert "jupyterlab-chat >=0.23.0" in run
+
+
+def test_is_published_matches_exact_version(monkeypatch):
+    """is_published bypasses the cache and matches the exact version, so it can
+    poll for propagation after a green post-merge build."""
+    from superreleaser import condaforge
+
+    monkeypatch.setattr(
+        condaforge, "_get_json",
+        lambda url: {"versions": ["0.1.5", "0.2.0"]},
+    )
+    assert condaforge.is_published("jupyter-ai-acp-client", "0.2.0") is True
+    assert condaforge.is_published("jupyter-ai-acp-client", "v0.2.0") is True  # v-prefix ok
+    assert condaforge.is_published("jupyter-ai-acp-client", "0.2.1") is False
 
 
 def test_apply_update_preserves_templating_and_bumps():

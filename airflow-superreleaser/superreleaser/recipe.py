@@ -37,6 +37,15 @@ def pypi_name(recipe_text: str) -> str:
     raise ValueError("could not parse PyPI name from recipe")
 
 
+def conda_package_name(recipe_text: str) -> str:
+    """The recipe's own `package.name` — the canonical conda-forge package name
+    (may differ from the PyPI name, e.g. `jupyter_server`)."""
+    m = re.search(r"\npackage:\s*\n(?:.*\n)*?\s+name:\s*(\S+)", recipe_text)
+    if not m:
+        raise ValueError("could not parse package.name from recipe")
+    return m.group(1).strip().strip("\"'")
+
+
 def current_run_requirements(recipe_text: str) -> list[str]:
     """The existing `requirements.run:` entries, verbatim (their conda names are
     already correct — we reuse them and only refresh version ranges)."""

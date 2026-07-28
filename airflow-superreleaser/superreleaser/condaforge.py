@@ -55,6 +55,20 @@ def resolve_conda_name(pypi_name: str) -> str | None:
     return None
 
 
+def is_published(conda_name: str, version: str) -> bool:
+    """Is this exact version present on the conda-forge channel (anaconda.org)?
+
+    Bypasses the lru_cache (fetches fresh) so it's safe to call in a poll loop.
+    The anaconda.org package DB reflects an upload within minutes; the CDN
+    repodata that `conda install` reads lags (~30 min historically) — this
+    checks the DB, the earliest reliable "it shipped" signal. Only meaningful
+    once the post-merge build is green: a green build means the package was
+    uploaded, so absence here is propagation lag, not a missing release."""
+    version = version.lstrip("v")
+    data = _get_json(_ANACONDA.format(name=conda_name))
+    return bool(data) and version in (data.get("versions") or [])
+
+
 def version_available(conda_name: str, spec: str) -> bool:
     """Does at least one build on conda-forge satisfy `spec` (a PEP 440 range
     like '>=2.4.0,<3')? Empty spec means "any version present" → True if the

@@ -69,7 +69,8 @@ def comment(fs_dir: Path, pr_url: str, body: str, *, dry_run: bool) -> None:
 
 
 def pr_checks_state(pr_url: str) -> str:
-    """SUCCESS | FAILURE | PENDING — aggregate of the PR's status checks."""
+    """SUCCESS | FAILURE | PENDING — aggregate of the PR's status checks (on the
+    current head commit; the rollup follows the branch head)."""
     out = _run(
         ["gh", "pr", "view", pr_url, "--json", "statusCheckRollup", "--jq",
          '[.statusCheckRollup[].conclusion] '
@@ -78,5 +79,51 @@ def pr_checks_state(pr_url: str) -> str:
          'elif all(. == "SUCCESS" or . == "NEUTRAL" or . == "SKIPPED") then "SUCCESS" '
          'else "PENDING" end'],
         check=False,
+    )
+    return out or "PENDING"
+
+
+def pr_head_sha(pr_url: str) -> str:
+    """The PR branch's current head commit SHA."""
+    return _run(["gh", "pr", "view", pr_url, "--json", "headRefOid", "--jq",
+                 ".headRefOid"], check=False)
+
+
+def pr_last_commit_is_bot(pr_url: str) -> bool:
+    """True if the PR's latest commit was authored by a conda-forge bot — i.e.
+    the rerender has landed. The rerender commit is authored by
+    `conda-forge-webservices[bot]`."""
+    author = _run(
+        ["gh", "pr", "view", pr_url, "--json", "commits", "--jq",
+         '.commits[-1].authors[0].name // ""'],
+        check=False,
+    )
+    return "conda-forge" in author.lower() or author.endswith("[bot]")
+
+
+def merge_pr(fs_dir: Path, pr_url: str, *, dry_run: bool) -> None:
+    """Merge the feedstock PR (squash). Real merges touch conda-forge → dry-run
+    prints instead."""
+    if dry_run:
+        log.info("[dry-run] WOULD MERGE (squash): %s", pr_url)
+        return
+    _run(["gh", "pr", "merge", pr_url, "--squash"], cwd=fs_dir)
+
+
+def branch_checks_state(fs_dir: Path, branch: str) -> str:
+    """SUCCESS | FAILURE | PENDING for the latest commit on `branch` (e.g. the
+    default branch after a merge). Uses the commit-status/check-runs rollup so
+    it works off a branch name rather than a PR."""
+    slug = _run(["gh", "repo", "view", "--json", "nameWithOwner", "--jq",
+                 ".nameWithOwner"], cwd=fs_dir, check=False)
+    out = _run(
+        ["gh", "api", f"repos/{slug}/commits/{branch}/check-runs", "--jq",
+         '[.check_runs[].conclusion] '
+         '| if length == 0 then "PENDING" '
+         'elif any(. == null) then "PENDING" '
+         'elif any(. == "failure" or . == "cancelled" or . == "timed_out") then "FAILURE" '
+         'elif all(. == "success" or . == "neutral" or . == "skipped") then "SUCCESS" '
+         'else "PENDING" end'],
+        cwd=fs_dir, check=False,
     )
     return out or "PENDING"

@@ -12,11 +12,18 @@ headache. Trigger it with a `dag_run.conf` of `{"package": "jupyter-ai-acp-clien
   4. verify_cf     — every mapped dep exists on conda-forge AND its range
                      resolves to a build
   5. open_pr       — real PR; DRAFT + explanatory comment if any dep was
-                     unresolved; otherwise a normal PR
-  6. wait_for_ci   — sensor polling the PR's checks to pass/fail
-  7. notify        — tell the user the PR is ready for review
-  8. approval      — HITL ApprovalOperator; the human approves/rejects in the
-                     Airflow UI. Reject fails the run. (No auto-merge.)
+                     unresolved; then comments "@conda-forge-admin, please
+                     rerender" to trigger the rerender
+  6. wait_for_ci   — sensor: wait for the rerender commit to land AND checks to
+                     be green on that rerendered head (not the brief pre-rerender
+                     green)
+  7. approval      — HITL ApprovalOperator; approve → merge, reject → fail
+  8. merge_pr      — squash-merge the PR (destructive; gated behind approval)
+  9. verify_merge  — sensor: fail the run if the post-merge build on the default
+                     branch is red (a GREEN build = conda-forge uploaded it)
+ 10. await_conda_forge — sensor: wait for the version to appear on the
+                     conda-forge channel (bounded CDN propagation, since the
+                     green build already proved it shipped)
 
 Requires Airflow 3.1+ for the HITL ApprovalOperator (built on 3.3.0 here).
 """
@@ -57,7 +64,7 @@ def _conf(context, key, default=None):
 )
 def cf_release():
     @task(
-        task_display_name="1 · Checkout feedstock",
+        task_display_name="Checkout feedstock",
         doc_md="Sync the `<package>-feedstock` submodule to its remote default "
         "branch so we branch off current state. Fails if the feedstock isn't "
         "checked out locally.",
@@ -82,7 +89,7 @@ def cf_release():
         return {"package": package, "dry_run": dry_run, "default_branch": default_branch}
 
     @task(
-        task_display_name="2 · Pick version",
+        task_display_name="Identify version",
         doc_md="Pick the **earliest stable** PyPI version missing from the "
         "feedstock (one bump per PR, conda-forge convention; prereleases "
         "skipped). Skips the run if the feedstock is already current. Override "
@@ -99,11 +106,14 @@ def cf_release():
             raise AirflowSkipException(
                 f"{package}: feedstock at {cur} is already current on PyPI"
             )
-        log.info("%s: feedstock=%s -> target=%s (pypi=%s)", package, cur, target, pypi_project)
-        return {**ctx, "pypi_project": pypi_project, "current": cur, "target": target}
+        conda_name = rcp.conda_package_name(recipe_text)
+        log.info("%s: feedstock=%s -> target=%s (pypi=%s, conda=%s)",
+                 package, cur, target, pypi_project, conda_name)
+        return {**ctx, "pypi_project": pypi_project, "current": cur,
+                "target": target, "conda_name": conda_name}
 
     @task(
-        task_display_name="3 · Update recipe",
+        task_display_name="Update recipe",
         doc_md="Set `context.version`, `source.sha256` (from the PyPI sdist), "
         "and rewrite `requirements.run` from the released package's own "
         "metadata. conda-forge names for **new** deps are probed against "
@@ -139,7 +149,7 @@ def cf_release():
         return {**ctx, "sha256": sha, "diff": diff, **mapping}
 
     @task(
-        task_display_name="4 · Verify on conda-forge",
+        task_display_name="Verify recipe dependencies",
         doc_md="For every `requirements.run` entry: confirm the conda-forge "
         "package **exists** AND the required **version range resolves** to at "
         "least one real build. Does not hard-fail — entries that don't resolve "
@@ -155,7 +165,7 @@ def cf_release():
         return {**ctx, "unsatisfied": unsatisfied}
 
     @task(
-        task_display_name="5 · Open feedstock PR",
+        task_display_name="Open feedstock PR",
         doc_md="Push a branch and open the feedstock PR + `@conda-forge-admin, "
         "please rerender`. Opens as a **draft** (with a comment naming each "
         "unresolvable dependency) if any name was unresolved; a normal PR "
@@ -196,17 +206,35 @@ def cf_release():
         return {**ctx, "pr_url": pr_url, "draft": draft}
 
     def _checks_pass(ctx: dict) -> bool:
+        """Poke: True only once the rerender has landed AND checks are green on
+        that rerendered head.
+
+        A `@conda-forge-admin, please rerender` on a recipe change makes the
+        conda-forge bot push a new commit, which restarts CI. So we must NOT
+        accept the brief green that can appear on our own commit before the
+        rerender pushes — we first wait for the rerender commit to become the
+        branch head (authored by `conda-forge-webservices[bot]`), then require
+        green on it. (Edge: if a rerender is a genuine no-op it comments instead
+        of committing; a version bump always changes the recipe, so that path
+        doesn't occur here. If it ever did, approve/rerun manually.)"""
+        dlog = logging.getLogger("superreleaser.dag")
         if ctx["dry_run"]:
-            logging.getLogger("superreleaser.dag").info("[dry-run] skipping CI wait")
+            dlog.info("[dry-run] skipping CI + rerender wait")
             return True
-        state = gitops.pr_checks_state(ctx["pr_url"])
-        logging.getLogger("superreleaser.dag").info("CI state: %s", state)
+        pr = ctx["pr_url"]
+        if not gitops.pr_last_commit_is_bot(pr):
+            dlog.info("waiting for conda-forge rerender commit (head=%s)",
+                      gitops.pr_head_sha(pr)[:8])
+            return False
+        state = gitops.pr_checks_state(pr)
+        dlog.info("rerender landed (head=%s); CI state: %s",
+                  gitops.pr_head_sha(pr)[:8], state)
         if state == "FAILURE":
-            raise AirflowFailException(f"feedstock CI failed: {ctx['pr_url']}")
+            raise AirflowFailException(f"feedstock CI failed: {pr}")
         return state == "SUCCESS"
 
     @task(
-        task_display_name="6 · Build approval message",
+        task_display_name="Build approval message",
         doc_md="Assemble the Markdown shown at the approval gate — PR link, "
         "run requirements, and any unresolved/unsatisfied deps.",
     )
@@ -225,9 +253,57 @@ def cf_release():
         if ctx["unsatisfied"]:
             lines += ["", "**⚠️ Ranges with no matching conda-forge build yet:**",
                       *[f"- `{u}`" for u in ctx["unsatisfied"]]]
-        lines += ["", "Approve to accept this PR, or Reject to fail the run. "
-                  "(This does not auto-merge — merge manually after approval.)"]
+        lines += ["", "Approve to **merge** this PR (squash) and verify the "
+                  "post-merge build, or Reject to fail the run and merge nothing."]
         return "\n".join(lines)
+
+    @task(
+        task_display_name="Merge PR",
+        doc_md="Runs only after approval: squash-merge the feedstock PR. This "
+        "is the destructive conda-forge action — gated behind the human. "
+        "Skipped/printed in dry-run.",
+    )
+    def merge_pr(ctx: dict) -> dict:
+        fs = config.feedstock_dir(ctx["package"])
+        gitops.merge_pr(fs, ctx["pr_url"], dry_run=ctx["dry_run"])
+        log.info("merged %s", ctx["pr_url"])
+        return ctx
+
+    def _post_merge_ci_ok(ctx: dict) -> bool:
+        """Poke: wait for the default branch's post-merge build to settle, then
+        raise if it failed. conda-forge builds/uploads the package from the
+        default branch after merge; a red build there means the release didn't
+        actually ship, so it must fail the run rather than pass silently."""
+        dlog = logging.getLogger("superreleaser.dag")
+        if ctx["dry_run"]:
+            dlog.info("[dry-run] skipping post-merge CI check")
+            return True
+        fs = config.feedstock_dir(ctx["package"])
+        state = gitops.branch_checks_state(fs, ctx["default_branch"])
+        dlog.info("post-merge CI on %s: %s", ctx["default_branch"], state)
+        if state == "FAILURE":
+            raise AirflowFailException(
+                f"post-merge build failed on {ctx['default_branch']} "
+                f"for {ctx['pr_url']}"
+            )
+        return state == "SUCCESS"
+
+    def _available_on_conda_forge(ctx: dict) -> bool:
+        """Poke: wait for the merged version to appear on the conda-forge
+        channel. Only runs after a GREEN post-merge build — so we KNOW the
+        package was uploaded and this is pure CDN/repodata propagation (~30 min
+        historically), not a "will it ever ship" question. The sensor timeout
+        therefore means "propagation is abnormally slow", an anomaly to surface,
+        not an indefinite maybe."""
+        dlog = logging.getLogger("superreleaser.dag")
+        if ctx["dry_run"]:
+            dlog.info("[dry-run] skipping conda-forge availability wait")
+            return True
+        conda = ctx.get("conda_name") or ctx["package"]
+        ok = condaforge.is_published(conda, ctx["target"])
+        dlog.info("conda-forge availability %s==%s: %s", conda, ctx["target"],
+                  "available" if ok else "not yet (propagating)")
+        return ok
 
     # ---- wiring ----
     c = checkout()
@@ -238,7 +314,7 @@ def cf_release():
 
     wait_for_ci = PythonSensor(
         task_id="wait_for_ci",
-        task_display_name="7 · Wait for feedstock CI",
+        task_display_name="Wait for feedstock CI",
         doc_md="Poll the PR's status checks until they pass or fail "
         "(reschedule mode frees the worker slot between polls). Skipped in "
         "dry-run.",
@@ -252,16 +328,49 @@ def cf_release():
     gate_body = build_gate_body(pr)
     approval = ApprovalOperator(
         task_id="approval",
-        task_display_name="8 · Human approval",
+        task_display_name="Human approval",
         doc_md="Human-in-the-loop gate. Review the PR in the UI and "
-        "**Approve** or **Reject**. Reject fails the run; approve completes it. "
-        "Never auto-merges.",
+        "**Approve** or **Reject**. Approve → the PR is merged and the "
+        "post-merge build verified. Reject fails the run and merges nothing.",
         subject="conda-forge release approval",
         body=gate_body,
         fail_on_reject=True,
     )
 
-    pr >> wait_for_ci >> gate_body >> approval
+    merged = merge_pr(pr)
+
+    verify_merge = PythonSensor(
+        task_id="verify_merge",
+        task_display_name="Verify post-merge build",
+        doc_md="After merge, poll CI on the default branch's new head and fail "
+        "the run if that build failed. A green build here means conda-forge "
+        "uploaded the package. Skipped in dry-run.",
+        python_callable=_post_merge_ci_ok,
+        op_args=[merged],
+        mode="reschedule",
+        poke_interval=60,
+        timeout=60 * 60 * 3,
+    )
+
+    await_conda_forge = PythonSensor(
+        task_id="await_conda_forge",
+        task_display_name="Await conda-forge availability",
+        doc_md="Poll anaconda.org until the merged version appears on the "
+        "conda-forge channel. Reached only after a green post-merge build, so "
+        "this is bounded propagation (~30 min historically), not an open "
+        "question of whether it will ship. Timeout ⇒ abnormally slow "
+        "propagation. Skipped in dry-run.",
+        python_callable=_available_on_conda_forge,
+        op_args=[merged],
+        mode="reschedule",
+        poke_interval=120,
+        timeout=60 * 60 * 2,
+    )
+
+    # approval → merge → verify build → await CDN. merge_pr depends on `pr` for
+    # data (op_args), so gate it explicitly behind the approval before it runs.
+    (pr >> wait_for_ci >> gate_body >> approval >> merged
+     >> verify_merge >> await_conda_forge)
 
 
 cf_release()

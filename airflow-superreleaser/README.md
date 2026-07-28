@@ -20,9 +20,12 @@ Triggered with a conf like `{"package": "jupyter-ai-acp-client"}`:
 | `pick_version` | Pick the **earliest STABLE** PyPI version missing from the feedstock (one bump per PR, conda-forge convention; prereleases skipped). Skips if caught up. |
 | `update_recipe` | Set `context.version`, `source.sha256` (from the PyPI sdist), and rewrite `requirements.run` from the **released package's own metadata** (version ranges sorted floor-first). Logs the full `git diff` of the recipe. |
 | `verify_cf` | For every run dep: the conda-forge package **exists** *and* the required **version range resolves** to a build. Doesn't hard-fail — unmet ranges are surfaced in the PR body and the approval gate. |
-| `open_pr` | Push a branch and open the feedstock PR + `@conda-forge-admin, please rerender`. **DRAFT** (with an explanatory comment) if any dep was unresolved; a normal PR otherwise. **Never auto-merges.** |
-| `wait_for_ci` | `PythonSensor` (reschedule mode) polling the PR's checks to pass/fail. |
-| `build_gate_body` + `approval` | `ApprovalOperator` — review the PR in the UI and **Approve/Reject**. Reject fails the run. |
+| `open_pr` | Push a branch and open the feedstock PR, then comment `@conda-forge-admin, please rerender` to trigger the rerender. **DRAFT** (with an explanatory comment) if any dep was unresolved; a normal PR otherwise. |
+| `wait_for_ci` | `PythonSensor` (reschedule mode). Waits for the **rerender commit to land** (conda-forge pushes it, restarting CI) *then* for checks to be green on that rerendered head — so the brief green before the rerender doesn't count. |
+| `build_gate_body` + `approval` | `ApprovalOperator` — review the PR in the UI and **Approve/Reject**. Reject fails the run and merges nothing. |
+| `merge_pr` | Runs only on approval: squash-merge the PR. The one destructive conda-forge action, gated behind the human. |
+| `verify_merge` | `PythonSensor` — after merge, poll CI on the default branch's new head and **fail the run** if that build is red. A green build here means conda-forge **uploaded** the package. |
+| `await_conda_forge` | `PythonSensor` — poll anaconda.org until the version appears on the conda-forge channel. Reached only after a green post-merge build, so this is bounded CDN propagation (~30 min), not "will it ever ship." |
 
 ### The dependency-mapping problem (the hard part)
 
@@ -47,6 +50,21 @@ So names are **probed, never guessed** (`superreleaser/condaforge.py::resolve_co
 This "continue but track state, then comment on the PR" behavior is the core
 requirement — a missing mapping never silently drops a dependency or aborts the
 release.
+
+### "Never coming" vs. "still propagating"
+
+After merge, a package doesn't appear on conda-forge for download immediately
+(~30 min historically). The tricky part is telling *"it will never show up"*
+from *"it's uploaded and propagating."* Polling anaconda.org alone can't — both
+look like absence.
+
+The discriminator is the **post-merge build**, not the poll. conda-forge builds
+and uploads the package from the default-branch CI that runs *after* merge, so
+`verify_merge` gates everything: a **green** build means the artifact was
+uploaded (so any absence is pure CDN/repodata lag → `await_conda_forge` waits,
+bounded); a **red/missing** build means nothing shipped (→ fail loudly, don't
+wait forever). `await_conda_forge` is only reached in the first case, which is
+why its timeout means "abnormally slow propagation," never "maybe it's coming."
 
 ## Layout
 
@@ -83,9 +101,9 @@ Open the UI (http://localhost:8080), then trigger `cf_release` with a conf:
 ```
 
 - `dry_run: true` → edits the local recipe but **prints** the branch/push/PR/
-  comment commands instead of running them. Safe to walk the whole DAG.
+  comment/merge commands instead of running them. Safe to walk the whole DAG.
 - omit `dry_run` (or `false`) → **opens a real feedstock PR** (+ rerender
-  comment). Still never merges — you merge after approving.
+  comment) and, on approval, **merges it**.
 - `version: "0.2.0"` → force a specific target instead of earliest-missing.
 
 At the `approval` task the run enters `awaiting_input`; open it in the UI and
@@ -93,7 +111,8 @@ click **Approve** or **Reject**.
 
 ## Guardrails
 
-- **No auto-merge, ever.** The DAG opens/annotates the PR and gates; a human
-  merges on conda-forge after approving.
+- **Merge is gated behind the human.** The DAG opens/annotates the PR, waits for
+  the rerender + green CI, and only merges after you approve in the UI. Reject
+  merges nothing. `dry_run` prints the merge instead of doing it.
 - `gh` auth comes from your shell. `AIRFLOW_HOME` (SQLite DB, logs, generated
   password) stays out of version control.
