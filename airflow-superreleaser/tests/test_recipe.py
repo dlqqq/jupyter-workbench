@@ -98,11 +98,40 @@ def test_new_dep_unresolved_is_tracked_not_guessed(monkeypatch):
         lambda *_: [("brand-new-thing", ">=1.0")],
     )
     monkeypatch.setattr(condaforge, "resolve_conda_name", lambda n: None)
-    monkeypatch.setattr(condaforge, "version_available", lambda *_: True)
 
     m = rcp.map_dependencies("jupyter-ai-acp-client", "0.2.0", ["python >=3.10"])
     assert m["unresolved"] == ["brand-new-thing"]
     assert not any("brand-new-thing" in e for e in m["run"])
+
+
+def test_sort_spec_floor_before_ceiling():
+    assert rcp._sort_spec("<0.12.0,>=0.11.0") == ">=0.11.0,<0.12.0"
+    assert rcp._sort_spec("<3,>=2") == ">=2,<3"
+    assert rcp._sort_spec(">=0.23.0a4") == ">=0.23.0a4"  # single clause unchanged
+    assert rcp._sort_spec("") == ""
+
+
+def test_map_dependencies_sorts_specs(monkeypatch):
+    from superreleaser import condaforge
+
+    monkeypatch.setattr(
+        condaforge, "runtime_requirements",
+        lambda *_: [("pydantic", "<3,>=2")],
+    )
+    m = rcp.map_dependencies("x", "1.0", ["python >=3.10", "pydantic <3,>=2"])
+    assert "pydantic >=2,<3" in m["run"]  # floor-first
+
+
+def test_verify_run_flags_unsatisfiable_range(monkeypatch):
+    from superreleaser import condaforge
+
+    def fake_available(name, spec):
+        return not spec.startswith(">=99")  # the impossible range fails
+
+    monkeypatch.setattr(condaforge, "version_available", fake_available)
+    run = ["python >=${{ python_min }}", "pydantic >=2,<3", "pkgx >=99"]
+    unsat = rcp.verify_run(run)
+    assert unsat == ["pkgx >=99"]  # python + template skipped, good range passes
 
 
 def test_earliest_missing_stable_skips_prereleases(monkeypatch):

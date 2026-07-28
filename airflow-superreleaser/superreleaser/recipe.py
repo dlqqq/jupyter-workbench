@@ -92,6 +92,29 @@ def _entry_name(entry: str) -> str:
     return entry.strip().split()[0]
 
 
+def _sort_spec(spec: str) -> str:
+    """Order the comma-separated clauses of a version spec floor-first, so a
+    reader sees the lower bound before the upper bound.
+
+    `<0.12.0,>=0.11.0` -> `>=0.11.0,<0.12.0`. Clauses are ranked by operator:
+    lower bounds (`>=`, `>`, `==`, `~=`) before upper bounds (`<=`, `<`), then
+    alphabetically as a stable tiebreaker. Unparseable input is returned as-is.
+    """
+    if not spec:
+        return spec
+    order = {">=": 0, ">": 0, "==": 0, "~=": 0, "!=": 1, "<=": 2, "<": 2}
+
+    def rank(clause: str) -> tuple[int, str]:
+        clause = clause.strip()
+        for op, r in sorted(order.items(), key=lambda kv: -len(kv[0])):
+            if clause.startswith(op):
+                return (r, clause)
+        return (1, clause)
+
+    clauses = [c.strip() for c in spec.split(",") if c.strip()]
+    return ",".join(sorted(clauses, key=rank))
+
+
 def _pypi_to_conda_via_existing(pypi_name_: str, existing_names: set[str]) -> str | None:
     """If a run entry already in the recipe matches this PyPI dep (modulo
     `_`/`-`), reuse that (already-correct) conda name."""
@@ -119,16 +142,16 @@ def map_dependencies(
       {
         "run": [<entry>, ...],          # proposed requirements.run
         "unresolved": [<pypi_name>, ...],  # new deps with no CF package
-        "unsatisfied": [<conda_name spec>, ...],  # CF pkg exists but range has no build
       }
+
+    Version-range availability is checked separately by `verify_run` (the DAG's
+    verify_cf step), keeping name-resolution and range-verification distinct.
     """
     existing_names = {_entry_name(e) for e in existing_run}
     deps = condaforge.runtime_requirements(pypi_project, version)
 
     run: list[str] = []
     unresolved: list[str] = []
-    unsatisfied: list[str] = []
-    handled_pypi: set[str] = set()
 
     # python is always a run dep in these recipes but isn't in requires_dist;
     # preserve any existing `python ...` entry verbatim.
@@ -137,19 +160,32 @@ def map_dependencies(
             run.append(e)
 
     for dep, spec in deps:
-        handled_pypi.add(dep.lower().replace("_", "-"))
+        spec = _sort_spec(spec)  # floor before ceiling
         conda = _pypi_to_conda_via_existing(dep, existing_names)
-        is_new = conda is None
-        if is_new:
+        if conda is None:  # new dep — probe conda-forge, never guess
             conda = condaforge.resolve_conda_name(dep)
         if conda is None:
             unresolved.append(dep)
             continue
-        if not condaforge.version_available(conda, spec):
-            unsatisfied.append(f"{conda} {spec}".strip())
         run.append(f"{conda} {spec}".strip())
 
-    return {"run": run, "unresolved": unresolved, "unsatisfied": unsatisfied}
+    return {"run": run, "unresolved": unresolved}
+
+
+def verify_run(run: list[str]) -> list[str]:
+    """For each `requirements.run` entry, verify the conda-forge package exists
+    AND its version range resolves to at least one real build. Returns the
+    entries that DON'T (the `unsatisfied` list). `python` and template-valued
+    entries are skipped (not real conda-forge lookups)."""
+    unsatisfied: list[str] = []
+    for entry in run:
+        name = _entry_name(entry)
+        if name.lower() == "python" or "${{" in entry:
+            continue
+        spec = entry[len(name):].strip()
+        if not condaforge.version_available(name, spec):
+            unsatisfied.append(entry)
+    return unsatisfied
 
 
 # --------------------------------------------------------------------------- #

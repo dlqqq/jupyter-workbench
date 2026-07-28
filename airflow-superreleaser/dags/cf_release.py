@@ -56,7 +56,12 @@ def _conf(context, key, default=None):
     params={"package": "jupyter-ai-acp-client", "version": "", "dry_run": False},
 )
 def cf_release():
-    @task
+    @task(
+        task_display_name="1 · Checkout feedstock",
+        doc_md="Sync the `<package>-feedstock` submodule to its remote default "
+        "branch so we branch off current state. Fails if the feedstock isn't "
+        "checked out locally.",
+    )
     def checkout(**context) -> dict:
         package = _conf(context, "package") or context["params"]["package"]
         dry_run = bool(_conf(context, "dry_run", context["params"]["dry_run"])
@@ -76,7 +81,13 @@ def cf_release():
         log.info("feedstock %s on %s (dry_run=%s)", package, default_branch, dry_run)
         return {"package": package, "dry_run": dry_run, "default_branch": default_branch}
 
-    @task
+    @task(
+        task_display_name="2 · Pick version",
+        doc_md="Pick the **earliest stable** PyPI version missing from the "
+        "feedstock (one bump per PR, conda-forge convention; prereleases "
+        "skipped). Skips the run if the feedstock is already current. Override "
+        "with the `version` trigger param.",
+    )
     def pick_version(ctx: dict, **context) -> dict:
         package = ctx["package"]
         recipe_text = config.recipe_path(package).read_text()
@@ -91,10 +102,18 @@ def cf_release():
         log.info("%s: feedstock=%s -> target=%s (pypi=%s)", package, cur, target, pypi_project)
         return {**ctx, "pypi_project": pypi_project, "current": cur, "target": target}
 
-    @task
+    @task(
+        task_display_name="3 · Update recipe",
+        doc_md="Set `context.version`, `source.sha256` (from the PyPI sdist), "
+        "and rewrite `requirements.run` from the released package's own "
+        "metadata. conda-forge names for **new** deps are probed against "
+        "anaconda.org, never guessed; unresolvable ones are tracked (not added) "
+        "for the draft-PR + comment path. Logs the full `git diff` of the recipe.",
+    )
     def update_recipe(ctx: dict) -> dict:
         package, target, pypi_project = ctx["package"], ctx["target"], ctx["pypi_project"]
         recipe_file = config.recipe_path(package)
+        fs = config.feedstock_dir(package)
         text = recipe_file.read_text()
 
         sha = condaforge.sdist_sha256(pypi_project, target)
@@ -105,30 +124,43 @@ def cf_release():
         mapping = rcp.map_dependencies(pypi_project, target, existing)
         new_text = rcp.apply_update(text, target, sha, mapping["run"])
 
-        if not ctx["dry_run"]:
-            recipe_file.write_text(new_text)
-            log.info("wrote updated recipe: %s", recipe_file)
-        else:
-            log.info("[dry-run] would write recipe with run:\n  %s",
-                     "\n  ".join(mapping["run"]))
+        # Always write so we can show a real `git diff`; in dry-run we restore
+        # the file afterward so nothing is left changed on disk.
+        recipe_file.write_text(new_text)
+        diff = gitops.diff(fs, "recipe/recipe.yaml")
+        log.info("git diff recipe/recipe.yaml:\n%s", diff or "(no changes)")
+        if ctx["dry_run"]:
+            gitops._run(["git", "checkout", "--", "recipe/recipe.yaml"], cwd=fs, check=False)
+            log.info("[dry-run] reverted recipe on disk (diff shown above only)")
 
         if mapping["unresolved"]:
             log.warning("UNRESOLVED conda-forge deps (will draft + comment): %s",
                         mapping["unresolved"])
-        return {**ctx, "sha256": sha, **mapping}
+        return {**ctx, "sha256": sha, "diff": diff, **mapping}
 
-    @task
+    @task(
+        task_display_name="4 · Verify on conda-forge",
+        doc_md="For every `requirements.run` entry: confirm the conda-forge "
+        "package **exists** AND the required **version range resolves** to at "
+        "least one real build. Does not hard-fail — entries that don't resolve "
+        "are recorded as `unsatisfied` and surfaced in the PR body and the "
+        "approval gate, so a human sees the gap.",
+    )
     def verify_cf(ctx: dict) -> dict:
-        """Both checks: package exists AND version range resolves. Anything that
-        fails here is folded into the unresolved/unsatisfied state that drives
-        the draft-vs-real PR decision (we do NOT hard-fail — the whole point is
-        to still open a PR and flag the gap)."""
-        unresolved = list(ctx["unresolved"])
-        unsatisfied = list(ctx["unsatisfied"])
-        log.info("verify: %d unresolved, %d unsatisfied", len(unresolved), len(unsatisfied))
-        return {**ctx, "unresolved": unresolved, "unsatisfied": unsatisfied}
+        unsatisfied = rcp.verify_run(ctx["run"])
+        log.info("verify: %d run deps, %d unresolved names, %d unsatisfied ranges",
+                 len(ctx["run"]), len(ctx["unresolved"]), len(unsatisfied))
+        for u in unsatisfied:
+            log.warning("no conda-forge build satisfies: %s", u)
+        return {**ctx, "unsatisfied": unsatisfied}
 
-    @task
+    @task(
+        task_display_name="5 · Open feedstock PR",
+        doc_md="Push a branch and open the feedstock PR + `@conda-forge-admin, "
+        "please rerender`. Opens as a **draft** (with a comment naming each "
+        "unresolvable dependency) if any name was unresolved; a normal PR "
+        "otherwise. **Never merges.**",
+    )
     def open_pr(ctx: dict) -> dict:
         package, target = ctx["package"], ctx["target"]
         fs = config.feedstock_dir(package)
@@ -173,7 +205,11 @@ def cf_release():
             raise AirflowFailException(f"feedstock CI failed: {ctx['pr_url']}")
         return state == "SUCCESS"
 
-    @task
+    @task(
+        task_display_name="6 · Build approval message",
+        doc_md="Assemble the Markdown shown at the approval gate — PR link, "
+        "run requirements, and any unresolved/unsatisfied deps.",
+    )
     def build_gate_body(ctx: dict) -> str:
         lines = [
             f"### Review conda-forge PR for `{ctx['package']}` v{ctx['target']}",
@@ -186,6 +222,9 @@ def cf_release():
         if ctx["unresolved"]:
             lines += ["", "**⚠️ Unresolved deps (not added — fix before merge):**",
                       *[f"- `{u}`" for u in ctx["unresolved"]]]
+        if ctx["unsatisfied"]:
+            lines += ["", "**⚠️ Ranges with no matching conda-forge build yet:**",
+                      *[f"- `{u}`" for u in ctx["unsatisfied"]]]
         lines += ["", "Approve to accept this PR, or Reject to fail the run. "
                   "(This does not auto-merge — merge manually after approval.)"]
         return "\n".join(lines)
@@ -199,6 +238,10 @@ def cf_release():
 
     wait_for_ci = PythonSensor(
         task_id="wait_for_ci",
+        task_display_name="7 · Wait for feedstock CI",
+        doc_md="Poll the PR's status checks until they pass or fail "
+        "(reschedule mode frees the worker slot between polls). Skipped in "
+        "dry-run.",
         python_callable=_checks_pass,
         op_args=[pr],
         mode="reschedule",   # free the slot between polls
@@ -209,6 +252,10 @@ def cf_release():
     gate_body = build_gate_body(pr)
     approval = ApprovalOperator(
         task_id="approval",
+        task_display_name="8 · Human approval",
+        doc_md="Human-in-the-loop gate. Review the PR in the UI and "
+        "**Approve** or **Reject**. Reject fails the run; approve completes it. "
+        "Never auto-merges.",
         subject="conda-forge release approval",
         body=gate_body,
         fail_on_reject=True,

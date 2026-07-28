@@ -23,6 +23,12 @@ def _run(cmd: list[str], *, cwd: Path | None = None, check: bool = True) -> str:
     return p.stdout.strip()
 
 
+def diff(fs_dir: Path, path: str = "recipe/recipe.yaml") -> str:
+    """`git diff` of one path in the feedstock, for display in a task log.
+    Works whether or not the change is committed (diffs the working tree)."""
+    return _run(["git", "diff", "--", path], cwd=fs_dir, check=False)
+
+
 def branch_and_commit(
     fs_dir: Path, branch: str, message: str, *, dry_run: bool
 ) -> None:

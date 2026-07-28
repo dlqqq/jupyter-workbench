@@ -18,8 +18,8 @@ Triggered with a conf like `{"package": "jupyter-ai-acp-client"}`:
 |------|------|
 | `checkout` | Sync the `<pkg>-feedstock` submodule to its remote default branch. |
 | `pick_version` | Pick the **earliest STABLE** PyPI version missing from the feedstock (one bump per PR, conda-forge convention; prereleases skipped). Skips if caught up. |
-| `update_recipe` | Set `context.version`, `source.sha256` (from the PyPI sdist), and rewrite `requirements.run` from the **released package's own metadata**. |
-| `verify_cf` | For every run dep: the conda-forge package **exists** *and* the required **version range resolves** to a build. |
+| `update_recipe` | Set `context.version`, `source.sha256` (from the PyPI sdist), and rewrite `requirements.run` from the **released package's own metadata** (version ranges sorted floor-first). Logs the full `git diff` of the recipe. |
+| `verify_cf` | For every run dep: the conda-forge package **exists** *and* the required **version range resolves** to a build. Doesn't hard-fail — unmet ranges are surfaced in the PR body and the approval gate. |
 | `open_pr` | Push a branch and open the feedstock PR + `@conda-forge-admin, please rerender`. **DRAFT** (with an explanatory comment) if any dep was unresolved; a normal PR otherwise. **Never auto-merges.** |
 | `wait_for_ci` | `PythonSensor` (reschedule mode) polling the PR's checks to pass/fail. |
 | `build_gate_body` + `approval` | `ApprovalOperator` — review the PR in the UI and **Approve/Reject**. Reject fails the run. |
